@@ -621,6 +621,11 @@ func UIntNumberTerm(u uint64) *Term {
 	return &Term{Value: uint64Number(u)}
 }
 
+// Int64NumberTerm creates a new Term with an int64 Number value.
+func Int64NumberTerm(u int64) *Term {
+	return &Term{Value: int64Number(u)}
+}
+
 // FloatNumberTerm creates a new Term with a floating point Number value.
 func FloatNumberTerm(f float64) *Term {
 	s := strconv.FormatFloat(f, 'g', -1, 64)

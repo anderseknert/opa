@@ -2,10 +2,9 @@ package topdown
 
 import (
 	"context"
+	"github.com/open-policy-agent/opa/ast"
 	"math/rand"
 	"testing"
-
-	"github.com/open-policy-agent/opa/ast"
 )
 
 func TestRandIntnZero(t *testing.T) {
@@ -100,4 +99,11 @@ func TestRandIntnSavingDuringPartialEval(t *testing.T) {
 	if len(queries) != 1 || !queries[0].Equal(exp) {
 		t.Fatalf("expected %v but got: %v", exp, queries)
 	}
+}
+
+func TestRangePerformance(t *testing.T) {
+	o := []*ast.Term{ast.NewTerm(ast.MustInterfaceToValue(0)), ast.NewTerm(ast.MustInterfaceToValue(10_000_000))}
+	_ = builtinNumbersRange(BuiltinContext{}, o, func(term *ast.Term) error {
+		return nil
+	})
 }

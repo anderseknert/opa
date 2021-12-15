@@ -6,10 +6,10 @@ package topdown
 
 import (
 	"fmt"
-	"math/big"
-
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/topdown/builtins"
+	"math"
+	"math/big"
 )
 
 type randIntCachingKey string
@@ -37,19 +37,40 @@ func builtinNumbersRange(bctx BuiltinContext, operands []*ast.Term, iter func(*a
 		},
 	}
 
-	if cmp <= 0 {
-		for i := new(big.Int).Set(x); i.Cmp(y) <= 0; i = i.Add(i, one) {
-			if bctx.Cancel != nil && bctx.Cancel.Cancelled() {
-				return haltErr
+	maxInt64 := new(big.Int).SetInt64(math.MaxInt64)
+	useInt64 := x.Cmp(maxInt64) < 0 && y.Cmp(maxInt64) < 0
+
+	if useInt64 {
+		if cmp <= 0 {
+			for i := x.Int64(); i <= y.Int64(); i++ {
+				if bctx.Cancel != nil && bctx.Cancel.Cancelled() {
+					return haltErr
+				}
+				result = result.Append(ast.Int64NumberTerm(i))
 			}
-			result = result.Append(ast.NewTerm(builtins.IntToNumber(i)))
+		} else {
+			for i := x.Int64(); i >= y.Int64(); i-- {
+				if bctx.Cancel != nil && bctx.Cancel.Cancelled() {
+					return haltErr
+				}
+				result = result.Append(ast.Int64NumberTerm(i))
+			}
 		}
 	} else {
-		for i := new(big.Int).Set(x); i.Cmp(y) >= 0; i = i.Sub(i, one) {
-			if bctx.Cancel != nil && bctx.Cancel.Cancelled() {
-				return haltErr
+		if cmp <= 0 {
+			for i := new(big.Int).Set(x); i.Cmp(y) <= 0; i = i.Add(i, one) {
+				if bctx.Cancel != nil && bctx.Cancel.Cancelled() {
+					return haltErr
+				}
+				result = result.Append(ast.NewTerm(builtins.IntToNumber(i)))
 			}
-			result = result.Append(ast.NewTerm(builtins.IntToNumber(i)))
+		} else {
+			for i := new(big.Int).Set(x); i.Cmp(y) >= 0; i = i.Sub(i, one) {
+				if bctx.Cancel != nil && bctx.Cancel.Cancelled() {
+					return haltErr
+				}
+				result = result.Append(ast.NewTerm(builtins.IntToNumber(i)))
+			}
 		}
 	}
 
