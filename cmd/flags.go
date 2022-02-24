@@ -81,6 +81,10 @@ func addCountFlag(fs *pflag.FlagSet, count *int, cmdType string) {
 	fs.IntVar(count, "count", 1, fmt.Sprintf("number of times to repeat each %s", cmdType))
 }
 
+func addE2EFlag(fs *pflag.FlagSet, e2e *bool, value bool) {
+	fs.BoolVar(e2e, "e2e", value, "run benchmarks against running OPA server")
+}
+
 func addMaxErrorsFlag(fs *pflag.FlagSet, errLimit *int) {
 	fs.IntVarP(errLimit, "max-errors", "m", ast.CompileErrorLimitDefault, "set the number of errors to allow before compilation fails early")
 }

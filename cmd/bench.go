@@ -5,22 +5,29 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
-	"math"
-	"os"
-	"sort"
-	"testing"
-
 	"github.com/olekukonko/tablewriter"
-	"github.com/spf13/cobra"
-
 	"github.com/open-policy-agent/opa/compile"
+	fileurl "github.com/open-policy-agent/opa/internal/file/url"
 	"github.com/open-policy-agent/opa/internal/presentation"
+	"github.com/open-policy-agent/opa/logging"
 	"github.com/open-policy-agent/opa/metrics"
 	"github.com/open-policy-agent/opa/rego"
+	"github.com/open-policy-agent/opa/runtime"
 	"github.com/open-policy-agent/opa/util"
+	"github.com/spf13/cobra"
+	"io"
+	"io/ioutil"
+	"math"
+	"net/http"
+	"os"
+	"sort"
+	"strings"
+	"testing"
+	"time"
 )
 
 // benchmarkCommandParams are a superset of evalCommandParams
@@ -28,8 +35,10 @@ import (
 // ones compatible with running a benchmark.
 type benchmarkCommandParams struct {
 	evalCommandParams
-	benchMem bool
-	count    int
+	benchMem   bool
+	count      int
+	e2e        bool
+	configFile string
 }
 
 const (
@@ -105,6 +114,10 @@ The optional "gobench" output format conforms to the Go Benchmark Data Format.
 	addCountFlag(benchCommand.Flags(), &params.count, "benchmark")
 	addBenchmemFlag(benchCommand.Flags(), &params.benchMem, true)
 
+	// E2E flags
+	addE2EFlag(benchCommand.Flags(), &params.e2e, false)
+	addConfigFileFlag(benchCommand.Flags(), &params.configFile)
+
 	RootCommand.AddCommand(benchCommand)
 }
 
@@ -112,19 +125,236 @@ type benchRunner interface {
 	run(ctx context.Context, ectx *evalContext, params benchmarkCommandParams, f func(context.Context, ...rego.EvalOption) error) (testing.BenchmarkResult, error)
 }
 
+type response struct {
+	Metrics *struct {
+		TimerRegoInputParseNs  *int64 `json:"timer_rego_input_parse_ns,omitempty"`
+		TimerRegoPartialEvalNs *int64 `json:"timer_rego_partial_eval_ns,omitempty"`
+		TimerRegoQueryEvalNs   *int64 `json:"timer_rego_query_eval_ns,omitempty"`
+		TimerServerHandlerNs   *int64 `json:"timer_server_handler_ns,omitempty"`
+	} `json:"metrics,omitempty"`
+	Result *interface{} `json:"result,omitempty"`
+}
+
+func e2eQuery(params benchmarkCommandParams, url string, reqBody []byte, m metrics.Metrics) error {
+	resp, err := http.Post(url, "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("expected 200 response, got %v, with body %v", resp.StatusCode, body)
+	}
+
+	var opaResp response
+	if err = json.Unmarshal(body, &opaResp); err != nil {
+		return err
+	}
+
+	if params.fail && !params.partial && opaResp.Result == nil {
+		return fmt.Errorf("undefined result")
+	}
+
+	if params.metrics && opaResp.Metrics != nil {
+		if opaResp.Metrics.TimerRegoInputParseNs != nil {
+			m.Histogram("timer_rego_input_parse_ns").Update(*opaResp.Metrics.TimerRegoInputParseNs)
+		}
+		if opaResp.Metrics.TimerRegoQueryEvalNs != nil {
+			m.Histogram("timer_rego_query_eval_ns").Update(*opaResp.Metrics.TimerRegoQueryEvalNs)
+		}
+		if opaResp.Metrics.TimerServerHandlerNs != nil {
+			m.Histogram("timer_server_handler_ns").Update(*opaResp.Metrics.TimerServerHandlerNs)
+		}
+		if params.partial && opaResp.Metrics.TimerRegoPartialEvalNs != nil {
+			m.Histogram("timer_rego_partial_eval_ns").Update(*opaResp.Metrics.TimerRegoPartialEvalNs)
+		}
+	}
+
+	fmt.Println(string(body))
+
+	return nil
+}
+
+func runE2E(params benchmarkCommandParams, url string, reqBody []byte) (testing.BenchmarkResult, error) {
+	m := metrics.New()
+
+	var benchErr error
+	br := testing.Benchmark(func(b *testing.B) {
+		m.Clear()
+
+		if params.benchMem {
+			b.ReportAllocs()
+		}
+
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			b.StartTimer()
+
+			err := e2eQuery(params, url, reqBody, m)
+
+			b.StopTimer()
+			if err != nil {
+				benchErr = err
+				b.FailNow()
+			}
+		}
+
+		for name, metric := range m.All() {
+			histValues, ok := metric.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			for metricName, rawValue := range histValues {
+				unit := fmt.Sprintf("%s_%s", name, metricName)
+				switch v := rawValue.(type) {
+				case int64:
+					b.ReportMetric(float64(v), unit)
+				case float64:
+					b.ReportMetric(v, unit)
+				}
+			}
+		}
+	})
+
+	return br, benchErr
+}
+
+func benchE2E(ctx context.Context, args []string, params benchmarkCommandParams, w io.Writer) error {
+	host := "localhost"
+	port := "18181"
+	addr := []string{fmt.Sprintf("%s:%s", host, port)}
+
+	logger := logging.New()
+	logger.SetLevel(logging.Error)
+
+	dataPaths := params.dataPaths.v
+	if len(params.bundlePaths.v) > 0 {
+		dataPaths = append(dataPaths, params.bundlePaths.v...)
+	}
+
+	rtParams := runtime.Params{
+		Addrs:                  &addr,
+		Paths:                  dataPaths,
+		Logger:                 logger,
+		ConfigFile:             params.configFile,
+		SkipBundleVerification: true,
+	}
+
+	rt, err := runtime.NewRuntime(ctx, rtParams)
+	if err != nil {
+		return err
+	}
+
+	initChan := rt.Manager.ServerInitializedChannel()
+
+	cctx, cancel := context.WithCancel(ctx)
+	go rt.StartServer(cctx)
+	defer cancel()
+
+	select {
+	case <-initChan:
+		// Server initialized, proceed with requests
+	case <-time.After(30 * time.Second):
+		return fmt.Errorf("timeout after waiting 30 seconds for server init")
+	}
+
+	input, err := readInput(params)
+	if err != nil {
+		return err
+	}
+	query, err := readQuery(params, args)
+	if err != nil {
+		return err
+	}
+
+	var reqBody []byte
+
+	// Wrap input in "input" attribute
+	body := make(map[string]interface{})
+	inp := make(map[string]interface{})
+	if err = json.Unmarshal(input, &inp); err != nil {
+		return err
+	}
+	body["input"] = inp
+
+	var path string
+	if params.partial {
+		// TODO: test
+		path = "compile"
+		body["query"] = query
+		if len(params.unknowns) > 0 {
+			body["unknowns"] = params.unknowns
+		}
+	} else {
+		path, err = queryToPath(query)
+		if err != nil {
+			return err
+		}
+	}
+
+	reqBody, err = json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(reqBody))
+
+	url := fmt.Sprintf("http://%s:%s/v1/%v", host, port, path)
+	if params.metrics {
+		url += "?metrics=true"
+	}
+
+	for i := 0; i < params.count; i++ {
+		br, err := runE2E(params, url, reqBody)
+		if err != nil {
+			return renderBenchmarkError(params, err, w)
+		}
+		renderBenchmarkResult(params, br, w)
+	}
+	return nil
+}
+
+func readInput(params benchmarkCommandParams) ([]byte, error) {
+	if params.stdinInput {
+		return ioutil.ReadAll(os.Stdin)
+	} else if params.inputPath != "" {
+		path, err := fileurl.Clean(params.inputPath)
+		if err != nil {
+			return nil, err
+		}
+		return ioutil.ReadFile(path)
+	}
+	return nil, nil
+}
+
 func benchMain(args []string, params benchmarkCommandParams, w io.Writer, r benchRunner) (int, error) {
+	ctx := context.Background()
+
+	if params.e2e {
+		err := benchE2E(ctx, args, params, w)
+		code := 0
+		if err != nil {
+			code = 1
+		}
+		return code, err
+	}
+
 	ectx, err := setupEval(args, params.evalCommandParams)
 	if err != nil {
 		errRender := renderBenchmarkError(params, err, w)
 		return 1, errRender
 	}
 
-	ctx := context.Background()
 	var benchFunc func(context.Context, ...rego.EvalOption) error
 	rg := rego.New(ectx.regoArgs...)
 
 	if !params.partial {
-		// Take the eval context and prepare anything else we possible can before benchmarking the evaluation
+		// Take the eval context and prepare anything else we possibly can before benchmarking the evaluation
 		pq, err := rg.PrepareForEval(ctx)
 		if err != nil {
 			errRender := renderBenchmarkError(params, err, w)
@@ -177,14 +407,10 @@ type goBenchRunner struct {
 
 func (r *goBenchRunner) run(ctx context.Context, ectx *evalContext, params benchmarkCommandParams, f func(context.Context, ...rego.EvalOption) error) (testing.BenchmarkResult, error) {
 
-	var hist metrics.Metrics
-	if params.metrics {
-		hist = metrics.New()
-	}
-
-	var m metrics.Metrics
+	var m, hist metrics.Metrics
 	if params.metrics {
 		m = metrics.New()
+		hist = metrics.New()
 	}
 
 	ectx.evalArgs = append(ectx.evalArgs, rego.EvalMetrics(m))
@@ -332,4 +558,25 @@ func prettyFormatFloat(x float64) string {
 		format = "%17.6f"
 	}
 	return fmt.Sprintf(format, x)
+}
+
+func readQuery(params benchmarkCommandParams, args []string) (string, error) {
+	var query string
+	if params.stdin {
+		bs, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			return "", err
+		}
+		query = string(bs)
+	} else {
+		query = args[0]
+	}
+	return query, nil
+}
+
+func queryToPath(query string) (string, error) {
+	if !strings.HasPrefix(query, "data.") {
+		return "", fmt.Errorf("e2e query must start with 'data.'")
+	}
+	return strings.ReplaceAll(query, ".", "/"), nil
 }
