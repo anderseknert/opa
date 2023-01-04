@@ -424,6 +424,12 @@ func (rt *Runtime) Serve(ctx context.Context) error {
 		rt.logger.Error("Token authentication enabled without authorization. Authentication will be ineffective. See https://www.openpolicyagent.org/docs/latest/security/#authentication-and-authorization for more information.")
 	}
 
+	if os.Getenv("OPA_ROOTLESS_IMAGE") == "true" {
+		rt.logger.Warn(
+			"Rootless mode is now the default for OPA containers, and the -rootless images will be removed " +
+				"with the next release of OPA (v0.49.0). Make sure to remove the -rootless suffix from your images.")
+	}
+
 	checkUserPrivileges(rt.logger)
 
 	// NOTE(tsandall): at some point, hopefully we can remove this because the
