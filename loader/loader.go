@@ -8,7 +8,10 @@ package loader
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/fs"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -581,6 +584,36 @@ func newResult() *Result {
 	}
 }
 
+func remoteToTmpFile(path string) (string, error) {
+	remote, err := url.Parse(path)
+	if err != nil {
+		return "", err
+	}
+
+	parts := strings.Split(remote.Path, "/")
+	filename := parts[len(parts)-1]
+
+	file, err := os.CreateTemp("", filename+"-*.tar.gz")
+	if err != nil {
+		return "", err
+	}
+	client := http.Client{}
+
+	resp, err := client.Get(path)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	_, err = io.Copy(file, resp.Body)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	return file.Name(), nil
+}
+
 func all(fsys fs.FS, paths []string, filter Filter, f func(*Result, string, int) error) (*Result, error) {
 	errs := Errors{}
 	root := newResult()
@@ -595,6 +628,14 @@ func all(fsys fs.FS, paths []string, filter Filter, f func(*Result, string, int)
 		if len(prefix) > 0 {
 			for _, part := range prefix {
 				loaded = loaded.withParent(part)
+			}
+		}
+
+		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+			var err error
+			path, err = remoteToTmpFile(path)
+			if err != nil {
+				return nil, err
 			}
 		}
 
