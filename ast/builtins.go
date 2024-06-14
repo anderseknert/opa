@@ -2688,7 +2688,6 @@ var TypeNameBuiltin = &Builtin{
  * HTTP Request
  */
 
-// Marked non-deterministic because HTTP request results can be non-deterministic.
 var HTTPSend = &Builtin{
 	Name:        "http.send",
 	Description: "Returns a HTTP response to the given HTTP request.",
@@ -2696,8 +2695,29 @@ var HTTPSend = &Builtin{
 		types.Args(
 			types.Named("request", types.NewObject(nil, types.NewDynamicProperty(types.S, types.A))),
 		),
-		types.Named("response", types.NewObject(nil, types.NewDynamicProperty(types.A, types.A))),
+		types.Named(
+			"response",
+			types.Or(
+				types.NewObject([]*types.StaticProperty{
+					{Key: "status", Value: types.S},
+					{Key: "status_code", Value: types.N},
+					{Key: "body", Value: types.A},
+					{Key: "raw_body", Value: types.S},
+					{Key: "headers", Value: types.NewObject(
+						nil, types.NewDynamicProperty(types.S, types.NewArray(nil, types.S)),
+					)},
+				}, nil),
+				types.NewObject([]*types.StaticProperty{
+					{Key: "status_code", Value: types.N},
+					{Key: "error", Value: types.NewObject([]*types.StaticProperty{
+						{Key: "code", Value: types.S},
+						{Key: "message", Value: types.S},
+					}, nil)},
+				}, nil),
+			),
+		),
 	),
+	// Marked non-deterministic because HTTP request results can be non-deterministic.
 	Nondeterministic: true,
 }
 

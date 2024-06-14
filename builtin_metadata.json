@@ -7061,7 +7061,7 @@
     "introduced": "v0.17.0",
     "result": {
       "name": "response",
-      "type": "object[any: any]"
+      "type": "any\u003cobject\u003cbody: any, headers: object[string: array[string]], raw_body: string, status: string, status_code: number\u003e, object\u003cerror: object\u003ccode: string, message: string\u003e, status_code: number\u003e\u003e"
     },
     "wasm": false
   },

@@ -1510,15 +1510,86 @@
           }
         ],
         "result": {
-          "dynamic": {
-            "key": {
-              "type": "any"
+          "of": [
+            {
+              "static": [
+                {
+                  "key": "body",
+                  "value": {
+                    "type": "any"
+                  }
+                },
+                {
+                  "key": "headers",
+                  "value": {
+                    "dynamic": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "dynamic": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                {
+                  "key": "raw_body",
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "key": "status",
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "key": "status_code",
+                  "value": {
+                    "type": "number"
+                  }
+                }
+              ],
+              "type": "object"
             },
-            "value": {
-              "type": "any"
+            {
+              "static": [
+                {
+                  "key": "error",
+                  "value": {
+                    "static": [
+                      {
+                        "key": "code",
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "key": "message",
+                        "value": {
+                          "type": "string"
+                        }
+                      }
+                    ],
+                    "type": "object"
+                  }
+                },
+                {
+                  "key": "status_code",
+                  "value": {
+                    "type": "number"
+                  }
+                }
+              ],
+              "type": "object"
             }
-          },
-          "type": "object"
+          ],
+          "type": "any"
         },
         "type": "function"
       },
