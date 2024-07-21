@@ -301,10 +301,11 @@ func NewRuntime(ctx context.Context, params Params) (*Runtime, error) {
 	if params.Logger != nil {
 		logger = params.Logger
 	} else {
-		stdLogger := logging.New()
-		stdLogger.SetLevel(level)
-		stdLogger.SetFormatter(internal_logging.GetFormatter(params.Logging.Format, params.Logging.TimestampFormat))
-		logger = stdLogger
+		logger = logging.NewSlogLogger(logging.SlogLoggerOptions{
+			Level:           params.Logging.Level,
+			Format:          params.Logging.Format,
+			TimestampFormat: params.Logging.TimestampFormat,
+		})
 	}
 
 	var filePaths []string
