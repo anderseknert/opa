@@ -633,7 +633,7 @@ func (p *Plugin) activate(ctx context.Context, name string, b *bundle.Bundle, is
 			skipKnownSchemaCheck := p.manager.Info.Get(ast.StringTerm("skip_known_schema_check"))
 			isAuthzEnabled := p.manager.Info.Get(ast.StringTerm("authorization_enabled"))
 
-			if ast.BooleanTerm(true).Equal(isAuthzEnabled) && ast.BooleanTerm(false).Equal(skipKnownSchemaCheck) {
+			if ast.CachedBooleanTerm(true).Equal(isAuthzEnabled) && ast.CachedBooleanTerm(false).Equal(skipKnownSchemaCheck) {
 				authorizationDecisionRef, err := ref.ParseDataPath(*p.manager.Config.DefaultAuthorizationDecision)
 				if err != nil {
 					return err

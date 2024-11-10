@@ -428,7 +428,7 @@ func (w *writer) writeRule(rule *ast.Rule, isElse bool, comments []*ast.Comment)
 	// `foo = {"a": "b"} { true }` in the AST. We want to preserve that notation
 	// in the formatted code instead of expanding the bodies into rules, so we
 	// pretend that the rule has no body in this case.
-	isExpandedConst := rule.Body.Equal(ast.NewBody(ast.NewExpr(ast.BooleanTerm(true)))) && rule.Else == nil
+	isExpandedConst := rule.Body.Equal(ast.NewBody(ast.NewExpr(ast.CachedBooleanTerm(true)))) && rule.Else == nil
 
 	comments = w.writeHead(rule.Head, rule.Default, isExpandedConst, comments)
 
@@ -581,7 +581,7 @@ func (w *writer) writeHead(head *ast.Head, isDefault, isExpandedConst bool, comm
 	}
 
 	if head.Value != nil &&
-		(head.Key != nil || ast.Compare(head.Value, ast.BooleanTerm(true)) != 0 || isExpandedConst || isDefault) {
+		(head.Key != nil || ast.Compare(head.Value, ast.CachedBooleanTerm(true)) != 0 || isExpandedConst || isDefault) {
 
 		// in rego v1, explicitly print value for ref-head constants that aren't partial set assignments, e.g.:
 		// * a -> parser error, won't reach here

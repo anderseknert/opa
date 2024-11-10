@@ -101,3 +101,14 @@ func TestRandIntnSavingDuringPartialEval(t *testing.T) {
 		t.Fatalf("expected %v but got: %v", exp, queries)
 	}
 }
+
+func BenchmarkNumbersRange(b *testing.B) {
+	ctx := context.Background()
+	q := NewQuery(ast.MustParseBody(`numbers.range(0, 512, out)`))
+	for i := 0; i < b.N; i++ {
+		_, err := q.Run(ctx)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}

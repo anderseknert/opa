@@ -237,22 +237,22 @@ func builtinObjectSubset(_ BuiltinContext, operands []*ast.Term, iter func(*ast.
 
 	if ok, superObj, subObj := bothObjects(superTerm, subTerm); ok {
 		// Both operands are objects.
-		return iter(ast.BooleanTerm(objectSubset(superObj, subObj)))
+		return iter(ast.CachedBooleanTerm(objectSubset(superObj, subObj)))
 	}
 
 	if ok, superSet, subSet := bothSets(superTerm, subTerm); ok {
 		// Both operands are sets.
-		return iter(ast.BooleanTerm(setSubset(superSet, subSet)))
+		return iter(ast.CachedBooleanTerm(setSubset(superSet, subSet)))
 	}
 
 	if ok, superArray, subArray := bothArrays(superTerm, subTerm); ok {
 		// Both operands are sets.
-		return iter(ast.BooleanTerm(arraySubset(superArray, subArray)))
+		return iter(ast.CachedBooleanTerm(arraySubset(superArray, subArray)))
 	}
 
 	if ok, superArray, subSet := arraySet(superTerm, subTerm); ok {
 		// Super operand is array and sub operand is set
-		return iter(ast.BooleanTerm(arraySetSubset(superArray, subSet)))
+		return iter(ast.CachedBooleanTerm(arraySetSubset(superArray, subSet)))
 	}
 
 	return builtins.ErrOperand("both arguments object.subset must be of the same type or array and set")

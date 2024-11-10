@@ -1470,3 +1470,12 @@ func assertForced(t *testing.T, x Object, forced bool) {
 		t.Errorf("expected %v to be forced", l)
 	}
 }
+
+func BenchmarkRefString(b *testing.B) {
+	ref := MustParseRef("data.foo.bar.baz.qux")
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = ref.String()
+	}
+}

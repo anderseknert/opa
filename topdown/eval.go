@@ -409,7 +409,7 @@ func (e *eval) evalStep(iter evalIterator) error {
 					return iter(e)
 				})
 			}
-			if !e.bindings.Plug(rterm).Equal(ast.BooleanTerm(false)) {
+			if !e.bindings.Plug(rterm).Equal(ast.CachedBooleanTerm(false)) {
 				defined = true
 				err := iter(e)
 				e.traceRedo(expr)
