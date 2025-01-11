@@ -17,6 +17,8 @@ var (
 	minusOneTerm = &Term{Value: Number("-1")}
 
 	InternedNullTerm = &Term{Value: Null{}}
+
+	InternedNullTerm = &Term{Value: Null{}}
 )
 
 // InternedBooleanTerm returns an interned term with the given boolean value.
