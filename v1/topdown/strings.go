@@ -135,7 +135,9 @@ func builtinFormatInt(_ BuiltinContext, operands []*ast.Term, iter func(*ast.Ter
 	case ast.Number("8"):
 		format = "%o"
 	case ast.Number("10"):
-		format = "%d"
+		if n, ok := input.Int(); ok {
+			return iter(ast.StringTerm(strconv.Itoa(n)))
+		}
 	case ast.Number("16"):
 		format = "%x"
 	default:

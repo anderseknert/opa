@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	mr "math/rand"
 	"sync"
 	"time"
@@ -848,10 +849,7 @@ func (m *Manager) UpdatePluginStatus(pluginName string, status *Status) {
 		m.mtx.Lock()
 		defer m.mtx.Unlock()
 		m.pluginStatus[pluginName] = status
-		toNotify = make(map[string]StatusListener, len(m.pluginStatusListeners))
-		for k, v := range m.pluginStatusListeners {
-			toNotify[k] = v
-		}
+		toNotify = maps.Clone(m.pluginStatusListeners)
 		statuses = m.copyPluginStatus()
 	}()
 

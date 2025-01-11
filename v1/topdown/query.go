@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
+	"slices"
 	"sort"
 	"time"
 
@@ -61,6 +62,7 @@ type Query struct {
 	printHook                   print.Hook
 	tracingOpts                 tracing.Options
 	virtualCache                VirtualCache
+	baseCache                   BaseCache
 }
 
 // Builtin represents a built-in function that queries can call.
@@ -313,6 +315,14 @@ func (q *Query) WithVirtualCache(vc VirtualCache) *Query {
 	return q
 }
 
+// WithBaseCache sets the BaseCache (cache of parsed JSON base documents) to use
+// during evaluation. If not set, a new cache is created for the context of a single
+// query evaluation.
+func (q *Query) WithBaseCache(bc BaseCache) *Query {
+	q.baseCache = bc
+	return q
+}
+
 // PartialRun executes partial evaluation on the query with respect to unknown
 // values. Partial evaluation attempts to evaluate as much of the query as
 // possible without requiring values for the unknowns set on the query. The
@@ -344,6 +354,13 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 		vc = NewVirtualCache()
 	}
 
+	var bc BaseCache
+	if q.baseCache != nil {
+		bc = q.baseCache
+	} else {
+		bc = NewQueryBaseCache()
+	}
+
 	e := &eval{
 		ctx:                         ctx,
 		metrics:                     q.metrics,
@@ -357,7 +374,7 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 		bindings:                    b,
 		compiler:                    q.compiler,
 		store:                       q.store,
-		baseCache:                   newBaseCache(),
+		baseCache:                   bc,
 		targetStack:                 newRefStack(),
 		txn:                         q.txn,
 		input:                       q.input,
@@ -436,9 +453,7 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 		}) // cannot return error
 
 		// Sort binding expressions so that results are deterministic.
-		sort.Slice(bindingExprs, func(i, j int) bool {
-			return bindingExprs[i].Compare(bindingExprs[j]) < 0
-		})
+		slices.SortFunc(bindingExprs, (*ast.Expr).Compare)
 
 		for i := range bindingExprs {
 			body.Append(bindingExprs[i])
@@ -534,6 +549,13 @@ func (q *Query) Iter(ctx context.Context, iter func(QueryResult) error) error {
 		vc = NewVirtualCache()
 	}
 
+	var bc BaseCache
+	if q.baseCache != nil {
+		bc = q.baseCache
+	} else {
+		bc = NewQueryBaseCache()
+	}
+
 	e := &eval{
 		ctx:                         ctx,
 		metrics:                     q.metrics,
@@ -547,7 +569,7 @@ func (q *Query) Iter(ctx context.Context, iter func(QueryResult) error) error {
 		bindings:                    newBindings(0, q.instr),
 		compiler:                    q.compiler,
 		store:                       q.store,
-		baseCache:                   newBaseCache(),
+		baseCache:                   bc,
 		targetStack:                 newRefStack(),
 		txn:                         q.txn,
 		input:                       q.input,

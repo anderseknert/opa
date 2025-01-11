@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"slices"
 	"strings"
 	"time"
 
@@ -526,7 +527,7 @@ func (c *Comment) setJSONOptions(opts astJSON.Options) {
 // Compare returns an integer indicating whether pkg is less than, equal to,
 // or greater than other.
 func (pkg *Package) Compare(other *Package) int {
-	return Compare(pkg.Path, other.Path)
+	return termSliceCompare(pkg.Path, other.Path)
 }
 
 // Copy returns a deep copy of pkg.
@@ -625,7 +626,8 @@ func (imp *Import) Compare(other *Import) int {
 	if cmp := Compare(imp.Path, other.Path); cmp != 0 {
 		return cmp
 	}
-	return Compare(imp.Alias, other.Alias)
+
+	return VarCompare(imp.Alias, other.Alias)
 }
 
 // Copy returns a deep copy of imp.
@@ -675,7 +677,7 @@ func (imp *Import) Name() Var {
 func (imp *Import) String() string {
 	buf := []string{"import", imp.Path.String()}
 	if len(imp.Alias) > 0 {
-		buf = append(buf, "as "+imp.Alias.String())
+		buf = append(buf, "as", imp.Alias.String())
 	}
 	return strings.Join(buf, " ")
 }
@@ -719,8 +721,11 @@ func (rule *Rule) Compare(other *Rule) int {
 	if cmp := rule.Head.Compare(other.Head); cmp != 0 {
 		return cmp
 	}
-	if cmp := util.Compare(rule.Default, other.Default); cmp != 0 {
-		return cmp
+	if rule.Default != other.Default {
+		if !rule.Default {
+			return -1
+		}
+		return 1
 	}
 	if cmp := rule.Body.Compare(other.Body); cmp != 0 {
 		return cmp
@@ -739,9 +744,11 @@ func (rule *Rule) Copy() *Rule {
 	cpy.Head = rule.Head.Copy()
 	cpy.Body = rule.Body.Copy()
 
-	cpy.Annotations = make([]*Annotations, len(rule.Annotations))
-	for i, a := range rule.Annotations {
-		cpy.Annotations[i] = a.Copy(&cpy)
+	if len(cpy.Annotations) > 0 {
+		cpy.Annotations = make([]*Annotations, len(rule.Annotations))
+		for i, a := range rule.Annotations {
+			cpy.Annotations[i] = a.Copy(&cpy)
+		}
 	}
 
 	if cpy.Else != nil {
@@ -818,9 +825,7 @@ func (rule *Rule) stringWithOpts(opts toStringOpts) string {
 		case RegoV1, RegoV0CompatV1:
 			buf = append(buf, "if")
 		}
-		buf = append(buf, "{")
-		buf = append(buf, rule.Body.String())
-		buf = append(buf, "}")
+		buf = append(buf, "{", rule.Body.String(), "}")
 	}
 	if rule.Else != nil {
 		buf = append(buf, rule.Else.elseString(opts))
@@ -873,8 +878,7 @@ func (rule *Rule) elseString(opts toStringOpts) string {
 
 	value := rule.Head.Value
 	if value != nil {
-		buf = append(buf, "=")
-		buf = append(buf, value.String())
+		buf = append(buf, "=", value.String())
 	}
 
 	switch opts.RegoVersion() {
@@ -882,9 +886,7 @@ func (rule *Rule) elseString(opts toStringOpts) string {
 		buf = append(buf, "if")
 	}
 
-	buf = append(buf, "{")
-	buf = append(buf, rule.Body.String())
-	buf = append(buf, "}")
+	buf = append(buf, "{", rule.Body.String(), "}")
 
 	if rule.Else != nil {
 		buf = append(buf, rule.Else.elseString(opts))
@@ -964,7 +966,7 @@ func (head *Head) DocKind() DocKind {
 	return CompleteDoc
 }
 
-type RuleKind int
+type RuleKind byte
 
 const (
 	SingleValue = iota
@@ -1021,7 +1023,7 @@ func (head *Head) Compare(other *Head) int {
 	if cmp := Compare(head.Reference, other.Reference); cmp != 0 {
 		return cmp
 	}
-	if cmp := Compare(head.Name, other.Name); cmp != 0 {
+	if cmp := VarCompare(head.Name, other.Name); cmp != 0 {
 		return cmp
 	}
 	if cmp := Compare(head.Key, other.Key); cmp != 0 {
@@ -1266,12 +1268,7 @@ func (body Body) Copy() Body {
 
 // Contains returns true if this body contains the given expression.
 func (body Body) Contains(x *Expr) bool {
-	for _, e := range body {
-		if e.Equal(x) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(body, x.Equal)
 }
 
 // Equal returns true if this Body is equal to the other Body.
@@ -1470,11 +1467,7 @@ func (expr *Expr) Copy() *Expr {
 	case *SomeDecl:
 		cpy.Terms = ts.Copy()
 	case []*Term:
-		cpyTs := make([]*Term, len(ts))
-		for i := range ts {
-			cpyTs[i] = ts[i].Copy()
-		}
-		cpy.Terms = cpyTs
+		cpy.Terms = termSliceCopy(ts)
 	case *Term:
 		cpy.Terms = ts.Copy()
 	case *Every:

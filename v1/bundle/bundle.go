@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"os"
 	"path"
@@ -93,7 +94,7 @@ type SignaturesConfig struct {
 
 // isEmpty returns if the SignaturesConfig is empty.
 func (s SignaturesConfig) isEmpty() bool {
-	return reflect.DeepEqual(s, SignaturesConfig{})
+	return s.Plugin == "" && s.Signatures == nil
 }
 
 // DecodedSignature represents the decoded JWT payload.
@@ -204,7 +205,7 @@ func (m Manifest) Equal(other Manifest) bool {
 
 	// If both are nil, or both are empty, we consider them equal.
 	if !(len(m.FileRegoVersions) == 0 && len(other.FileRegoVersions) == 0) &&
-		!reflect.DeepEqual(m.FileRegoVersions, other.FileRegoVersions) {
+		!maps.Equal(m.FileRegoVersions, other.FileRegoVersions) {
 		return false
 	}
 
@@ -719,7 +720,7 @@ func (r *Reader) Read() (Bundle, error) {
 			return bundle, err
 		}
 		r.metrics.Timer(metrics.RegoModuleParse).Start()
-		mf.Parsed, err = ast.ParseModuleWithOpts(mf.Path, string(mf.Raw), modulePopts)
+		mf.Parsed, err = ast.ParseModuleWithOpts(mf.Path, util.ByteSliceToString(mf.Raw), modulePopts)
 		r.metrics.Timer(metrics.RegoModuleParse).Stop()
 		if err != nil {
 			return bundle, err
@@ -747,11 +748,7 @@ func (r *Reader) Read() (Bundle, error) {
 
 	// check if the bundle signatures specify any files that weren't found in the bundle
 	if bundle.Type() == SnapshotBundleType && len(r.files) != 0 {
-		extra := []string{}
-		for k := range r.files {
-			extra = append(extra, k)
-		}
-		return bundle, fmt.Errorf("file(s) %v specified in bundle signatures but not found in the target bundle", extra)
+		return bundle, fmt.Errorf("file(s) %v specified in bundle signatures but not found in the target bundle", util.Keys(r.files))
 	}
 
 	if err := bundle.Manifest.validateAndInjectDefaults(bundle); err != nil {
@@ -1261,6 +1258,8 @@ func (m *Manifest) numericRegoVersionForFile(path string) (*int, error) {
 	return version, nil
 }
 
+const filepathSeparator = string(filepath.Separator)
+
 // Equal returns true if this bundle's contents equal the other bundle's
 // contents.
 func (b Bundle) Equal(other Bundle) bool {
@@ -1274,12 +1273,12 @@ func (b Bundle) Equal(other Bundle) bool {
 	for i := range b.Modules {
 		// To support bundles built from rootless filesystems we ignore a "/" prefix
 		// for URLs and Paths, such that "/file" and "file" are equivalent
-		if strings.TrimPrefix(b.Modules[i].URL, string(filepath.Separator)) !=
-			strings.TrimPrefix(other.Modules[i].URL, string(filepath.Separator)) {
+		if strings.TrimPrefix(b.Modules[i].URL, filepathSeparator) !=
+			strings.TrimPrefix(other.Modules[i].URL, filepathSeparator) {
 			return false
 		}
-		if strings.TrimPrefix(b.Modules[i].Path, string(filepath.Separator)) !=
-			strings.TrimPrefix(other.Modules[i].Path, string(filepath.Separator)) {
+		if strings.TrimPrefix(b.Modules[i].Path, filepathSeparator) !=
+			strings.TrimPrefix(other.Modules[i].Path, filepathSeparator) {
 			return false
 		}
 		if !b.Modules[i].Parsed.Equal(other.Modules[i].Parsed) {
@@ -1479,9 +1478,7 @@ func MergeWithRegoVersion(bundles []*Bundle, regoVersion ast.RegoVersion, usePat
 			if err != nil {
 				return nil, err
 			}
-			for k, v := range fileRegoVersions {
-				result.Manifest.FileRegoVersions[k] = v
-			}
+			maps.Copy(result.Manifest.FileRegoVersions, fileRegoVersions)
 		}
 	}
 

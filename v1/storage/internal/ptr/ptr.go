@@ -7,6 +7,7 @@ package ptr
 
 import (
 	"strconv"
+	"sync"
 
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/storage"
@@ -37,14 +38,23 @@ func Ptr(data interface{}, path storage.Path) (interface{}, error) {
 	return node, nil
 }
 
+var throwawayTermPtrs = &sync.Pool{
+	New: func() any {
+		return &ast.Term{}
+	},
+}
+
 func ValuePtr(data ast.Value, path storage.Path) (ast.Value, error) {
 	node := data
 	for i := range path {
 		key := path[i]
 		switch curr := node.(type) {
 		case ast.Object:
-			keyTerm := ast.StringTerm(key)
+			keyTerm := throwawayTermPtrs.Get().(*ast.Term)
+			keyTerm.Value = ast.String(key)
+
 			val := curr.Get(keyTerm)
+			throwawayTermPtrs.Put(keyTerm)
 			if val == nil {
 				return nil, errors.NewNotFoundError(path)
 			}

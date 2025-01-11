@@ -6,7 +6,6 @@
 package types
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -273,11 +272,11 @@ func newRawTraceV1(trace []*topdown.Event) (TraceV1, error) {
 }
 
 func newPrettyTraceV1(trace []*topdown.Event) (TraceV1, error) {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	topdown.PrettyTraceWithLocation(&buf, trace)
 
-	str := strings.Trim(buf.String(), "\n")
-	b, err := json.Marshal(strings.Split(str, "\n"))
+	str := strings.Split(strings.Trim(buf.String(), "\n"), "\n")
+	b, err := json.Marshal(str)
 	if err != nil {
 		return nil, err
 	}

@@ -5,6 +5,8 @@
 package topdown
 
 import (
+	"sync"
+
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/util"
 )
@@ -38,7 +40,7 @@ type virtualCache struct {
 
 type virtualCacheElem struct {
 	value     *ast.Term
-	children  *util.HashMap
+	children  *util.TypedHashMap[*ast.Term, *virtualCacheElem]
 	undefined bool
 }
 
@@ -56,8 +58,8 @@ func (c *virtualCache) Pop() {
 	c.stack = c.stack[:len(c.stack)-1]
 }
 
-// Returns the resolved value of the AST term and a flag indicating if the value
-// should be interpretted as undefined:
+// Returns the resolved value of the AST term and a flag indicating
+// if the value should be interpreted as undefined:
 //
 //	nil, true indicates the ref is undefined
 //	ast.Term, false indicates the ref is defined
@@ -70,7 +72,7 @@ func (c *virtualCache) Get(ref ast.Ref) (*ast.Term, bool) {
 		if !ok {
 			return nil, false
 		}
-		node = x.(*virtualCacheElem)
+		node = x
 	}
 	if node.undefined {
 		return nil, true
@@ -86,7 +88,7 @@ func (c *virtualCache) Put(ref ast.Ref, value *ast.Term) {
 	for i := 0; i < len(ref); i++ {
 		x, ok := node.children.Get(ref[i])
 		if ok {
-			node = x.(*virtualCacheElem)
+			node = x
 		} else {
 			next := newVirtualCacheElem()
 			node.children.Put(ref[i], next)
@@ -107,13 +109,13 @@ func (c *virtualCache) Keys() []ast.Ref {
 
 func keysRecursive(root ast.Ref, node *virtualCacheElem) []ast.Ref {
 	var keys []ast.Ref
-	node.children.Iter(func(k, v util.T) bool {
-		ref := root.Append(k.(*ast.Term))
-		if v.(*virtualCacheElem).value != nil {
+	node.children.Iter(func(k *ast.Term, v *virtualCacheElem) bool {
+		ref := root.Append(k)
+		if v.value != nil {
 			keys = append(keys, ref)
 		}
-		if v.(*virtualCacheElem).children.Len() > 0 {
-			keys = append(keys, keysRecursive(ref, v.(*virtualCacheElem))...)
+		if v.children.Len() > 0 {
+			keys = append(keys, keysRecursive(ref, v)...)
 		}
 		return false
 	})
@@ -124,29 +126,64 @@ func newVirtualCacheElem() *virtualCacheElem {
 	return &virtualCacheElem{children: newVirtualCacheHashMap()}
 }
 
-func newVirtualCacheHashMap() *util.HashMap {
-	return util.NewHashMap(func(a, b util.T) bool {
-		return a.(*ast.Term).Equal(b.(*ast.Term))
-	}, func(x util.T) int {
-		return x.(*ast.Term).Hash()
-	})
+func newVirtualCacheHashMap() *util.TypedHashMap[*ast.Term, *virtualCacheElem] {
+	return util.NewTypedHashMap[*ast.Term, *virtualCacheElem]((*ast.Term).Equal)
 }
 
-// baseCache implements a trie structure to cache base documents read out of
+// BaseCache defines the interface for a cache that stores the parsed base
+// documents read out of storage, a.k.a "ststic JSON data" (not policy).
+// Implementations should ensure that Put operations overwrite existing values.
+type BaseCache interface {
+	Get(ast.Ref) ast.Value
+	Put(ast.Ref, ast.Value)
+}
+
+// queryBaseCache implements a trie structure to cache base documents read out of
 // storage. Values inserted into the cache may contain other values that were
 // previously inserted. In this case, the previous values are erased from the
 // structure.
-type baseCache struct {
+type queryBaseCache struct {
 	root *baseCacheElem
 }
 
-func newBaseCache() *baseCache {
-	return &baseCache{
+// concurrentBaseCache is a thread-safe wrapper around queryBaseCache. This can be
+// used across parallel queries to cached base documents.
+type concurrentBaseCache struct {
+	cache *queryBaseCache
+	rwmu  sync.RWMutex
+}
+
+// NewQueryBaseCache returns a new instance of queryBaseCache, which is used to cache
+// base documents in the course of a single query. Note that you normally don't need
+// to instantiate this directly, as this will be the default base cache used unless
+// one is explicitly provided.
+func NewQueryBaseCache() *queryBaseCache {
+	return &queryBaseCache{
 		root: newBaseCacheElem(),
 	}
 }
 
-func (c *baseCache) Get(ref ast.Ref) ast.Value {
+// NewConcurrentBaseCache returns a new instance of concurrentBaseCache, which may
+// be used to cache base documents across queries (and goroutines).
+func NewConcurrentBaseCache() *concurrentBaseCache {
+	return &concurrentBaseCache{
+		cache: NewQueryBaseCache(),
+	}
+}
+
+func (c *concurrentBaseCache) Get(ref ast.Ref) ast.Value {
+	c.rwmu.RLock()
+	defer c.rwmu.RUnlock()
+	return c.cache.Get(ref)
+}
+
+func (c *concurrentBaseCache) Put(ref ast.Ref, value ast.Value) {
+	c.rwmu.Lock()
+	defer c.rwmu.Unlock()
+	c.cache.Put(ref, value)
+}
+
+func (c *queryBaseCache) Get(ref ast.Ref) ast.Value {
 	node := c.root
 	for i := 0; i < len(ref); i++ {
 		node = node.children[ref[i].Value]
@@ -163,7 +200,7 @@ func (c *baseCache) Get(ref ast.Ref) ast.Value {
 	return nil
 }
 
-func (c *baseCache) Put(ref ast.Ref, value ast.Value) {
+func (c *queryBaseCache) Put(ref ast.Ref, value ast.Value) {
 	node := c.root
 	for i := 0; i < len(ref); i++ {
 		if child, ok := node.children[ref[i].Value]; ok {
@@ -232,7 +269,7 @@ type comprehensionCache struct {
 
 type comprehensionCacheElem struct {
 	value    *ast.Term
-	children *util.HashMap
+	children *util.TypedHashMap[*ast.Term, *comprehensionCacheElem]
 }
 
 func newComprehensionCache() *comprehensionCache {
@@ -269,7 +306,7 @@ func (c *comprehensionCacheElem) Get(key []*ast.Term) *ast.Term {
 		if !ok {
 			return nil
 		}
-		node = x.(*comprehensionCacheElem)
+		node = x
 	}
 	return node.value
 }
@@ -279,7 +316,7 @@ func (c *comprehensionCacheElem) Put(key []*ast.Term, value *ast.Term) {
 	for i := 0; i < len(key); i++ {
 		x, ok := node.children.Get(key[i])
 		if ok {
-			node = x.(*comprehensionCacheElem)
+			node = x
 		} else {
 			next := newComprehensionCacheElem()
 			node.children.Put(key[i], next)
@@ -289,12 +326,8 @@ func (c *comprehensionCacheElem) Put(key []*ast.Term, value *ast.Term) {
 	node.value = value
 }
 
-func newComprehensionCacheHashMap() *util.HashMap {
-	return util.NewHashMap(func(a, b util.T) bool {
-		return a.(*ast.Term).Equal(b.(*ast.Term))
-	}, func(x util.T) int {
-		return x.(*ast.Term).Hash()
-	})
+func newComprehensionCacheHashMap() *util.TypedHashMap[*ast.Term, *comprehensionCacheElem] {
+	return util.NewTypedHashMap[*ast.Term, *comprehensionCacheElem]((*ast.Term).Equal)
 }
 
 type functionMocksStack struct {

@@ -5,7 +5,7 @@
 package ast
 
 import (
-	"reflect"
+	"slices"
 	"sort"
 	"testing"
 )
@@ -33,7 +33,7 @@ func TestValueMapIter(t *testing.T) {
 	})
 	sort.Strings(values)
 	expected := []string{"bar", "baz", "foo"}
-	if !reflect.DeepEqual(values, expected) {
+	if !slices.Equal(values, expected) {
 		t.Fatalf("Unexpected value from iteration: %v", values)
 	}
 }

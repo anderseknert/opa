@@ -3,10 +3,10 @@ package formatter
 import (
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 
 	"github.com/open-policy-agent/opa/internal/gqlparser/ast"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 type Formatter interface {
@@ -168,21 +168,11 @@ func (f *formatter) FormatSchema(schema *ast.Schema) {
 		f.WriteString("}").WriteNewline()
 	}
 
-	directiveNames := make([]string, 0, len(schema.Directives))
-	for name := range schema.Directives {
-		directiveNames = append(directiveNames, name)
-	}
-	sort.Strings(directiveNames)
-	for _, name := range directiveNames {
+	for _, name := range util.KeysSorted(schema.Directives) {
 		f.FormatDirectiveDefinition(schema.Directives[name])
 	}
 
-	typeNames := make([]string, 0, len(schema.Types))
-	for name := range schema.Types {
-		typeNames = append(typeNames, name)
-	}
-	sort.Strings(typeNames)
-	for _, name := range typeNames {
+	for _, name := range util.KeysSorted(schema.Types) {
 		f.FormatDefinition(schema.Types[name], false)
 	}
 }
