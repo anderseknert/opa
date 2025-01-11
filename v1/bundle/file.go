@@ -27,7 +27,7 @@ type Descriptor struct {
 	path      string
 	reader    io.Reader
 	closer    io.Closer
-	closeOnce *sync.Once
+	closeOnce sync.Once
 }
 
 // lazyFile defers reading the file until the first call of Read
@@ -76,7 +76,7 @@ func NewDescriptor(url, path string, reader io.Reader) *Descriptor {
 
 func (d *Descriptor) WithCloser(closer io.Closer) *Descriptor {
 	d.closer = closer
-	d.closeOnce = new(sync.Once)
+	d.closeOnce = sync.Once{}
 	return d
 }
 

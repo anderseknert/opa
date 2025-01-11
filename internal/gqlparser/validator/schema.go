@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"sort"
 	"strconv"
 	"strings"
 
@@ -9,6 +8,7 @@ import (
 	. "github.com/open-policy-agent/opa/internal/gqlparser/ast"
 	"github.com/open-policy-agent/opa/internal/gqlparser/gqlerror"
 	"github.com/open-policy-agent/opa/internal/gqlparser/parser"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 func LoadSchema(inputs ...*Source) (*Schema, error) {
@@ -187,12 +187,7 @@ func ValidateSchemaDocument(ast *SchemaDocument) (*Schema, error) {
 }
 
 func validateTypeDefinitions(schema *Schema) *gqlerror.Error {
-	types := make([]string, 0, len(schema.Types))
-	for typ := range schema.Types {
-		types = append(types, typ)
-	}
-	sort.Strings(types)
-	for _, typ := range types {
+	for _, typ := range util.KeysSorted(schema.Types) {
 		err := validateDefinition(schema, schema.Types[typ])
 		if err != nil {
 			return err
@@ -202,12 +197,7 @@ func validateTypeDefinitions(schema *Schema) *gqlerror.Error {
 }
 
 func validateDirectiveDefinitions(schema *Schema) *gqlerror.Error {
-	directives := make([]string, 0, len(schema.Directives))
-	for directive := range schema.Directives {
-		directives = append(directives, directive)
-	}
-	sort.Strings(directives)
-	for _, directive := range directives {
+	for _, directive := range util.KeysSorted(schema.Directives) {
 		err := validateDirective(schema, schema.Directives[directive])
 		if err != nil {
 			return err

@@ -12,6 +12,7 @@ import (
 	"github.com/open-policy-agent/opa/internal/rego/opa"
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/resolver"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 // New creates a new Resolver instance which is using the Wasm module
@@ -35,7 +36,7 @@ func New(entrypoints []ast.Ref, policy []byte, data interface{}) (*Resolver, err
 	// of entrypoints available in the Wasm module, however
 	// only the configured ones will be used when Eval() is
 	// called.
-	entrypointRefToID := ast.NewValueMap()
+	entrypointRefToID := util.NewTypedHashMap[ast.Ref, ast.Value](eqRef)
 	epIDs, err := o.Entrypoints(context.Background())
 	if err != nil {
 		return nil, err
@@ -59,11 +60,15 @@ func New(entrypoints []ast.Ref, policy []byte, data interface{}) (*Resolver, err
 	}, nil
 }
 
+func eqRef(a, b ast.Ref) bool {
+	return a.Equal(b)
+}
+
 // Resolver implements the resolver.Resolver interface
 // using Wasm modules to perform an evaluation.
 type Resolver struct {
 	entrypoints   []ast.Ref
-	entrypointIDs *ast.ValueMap
+	entrypointIDs *util.TypedHashMap[ast.Ref, ast.Value]
 	o             opa.EvalEngine
 }
 
@@ -81,8 +86,8 @@ func (r *Resolver) Close() {
 // Eval performs an evaluation using the provided input and the Wasm module
 // associated with this Resolver instance.
 func (r *Resolver) Eval(ctx context.Context, input resolver.Input) (resolver.Result, error) {
-	v := r.entrypointIDs.Get(input.Ref)
-	if v == nil {
+	v, ok := r.entrypointIDs.Get(input.Ref)
+	if !ok {
 		return resolver.Result{}, fmt.Errorf("unknown entrypoint %s", input.Ref)
 	}
 
@@ -157,6 +162,7 @@ func getResult(evalResult *opa.Result) (ast.Value, error) {
 
 	var obj ast.Object
 	err = resultSet.Iter(func(term *ast.Term) error {
+		var ok bool
 		obj, ok = term.Value.(ast.Object)
 		if !ok || obj.Len() != 1 {
 			return fmt.Errorf("illegal result type")

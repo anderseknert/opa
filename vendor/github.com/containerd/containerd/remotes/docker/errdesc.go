@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"sort"
 	"sync"
+
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 var (
@@ -125,13 +127,7 @@ func (a byValue) Less(i, j int) bool { return a[i].Value < a[j].Value }
 
 // GetGroupNames returns the list of Error group names that are registered
 func GetGroupNames() []string {
-	keys := []string{}
-
-	for k := range groupToDescriptors {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	return util.KeysSorted(groupToDescriptors)
 }
 
 // GetErrorCodeGroup returns the named group of error descriptors

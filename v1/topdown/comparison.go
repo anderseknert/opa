@@ -6,6 +6,10 @@ package topdown
 
 import "github.com/open-policy-agent/opa/v1/ast"
 
+// NOTE(ae) on performance: after recent improvements to Compare, and the use of interned
+// terms, these functions all complete in single-digit or low doube-digit nanoseconds and
+// none of them allocate memory on the heap.
+
 type compareFunc func(a, b ast.Value) bool
 
 func compareGreaterThan(a, b ast.Value) bool {

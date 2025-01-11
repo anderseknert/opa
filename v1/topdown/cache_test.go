@@ -52,7 +52,7 @@ func TestSetAndRetriveUndefined(t *testing.T) {
 func TestBaseCacheGetExactMatch(t *testing.T) {
 	t.Parallel()
 
-	cache := newBaseCache()
+	cache := NewQueryBaseCache()
 	cache.Put(ast.MustParseRef("data.x.foo"), ast.StringTerm("bar").Value)
 	result := cache.Get(ast.MustParseRef("data.x.foo"))
 	if result != ast.StringTerm("bar").Value {

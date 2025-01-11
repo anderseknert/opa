@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 	"time"
 
@@ -78,12 +79,8 @@ func (pr PartialResult) Rego(options ...func(*Rego)) *Rego {
 	r := New(options...)
 
 	// Propagate any custom builtins.
-	for k, v := range pr.builtinDecls {
-		r.builtinDecls[k] = v
-	}
-	for k, v := range pr.builtinFuncs {
-		r.builtinFuncs[k] = v
-	}
+	maps.Copy(r.builtinDecls, pr.builtinDecls)
+	maps.Copy(r.builtinFuncs, pr.builtinFuncs)
 	return r
 }
 
@@ -127,6 +124,7 @@ type EvalContext struct {
 	capabilities                *ast.Capabilities
 	strictBuiltinErrors         bool
 	virtualCache                topdown.VirtualCache
+	baseCache                   topdown.BaseCache
 }
 
 func (e *EvalContext) RawInput() *interface{} {
@@ -179,6 +177,14 @@ func (e *EvalContext) Capabilities() *ast.Capabilities {
 
 func (e *EvalContext) Transaction() storage.Transaction {
 	return e.txn
+}
+
+func (e *EvalContext) VirtualCache() topdown.VirtualCache {
+	return e.virtualCache
+}
+
+func (e *EvalContext) BaseCache() topdown.BaseCache {
+	return e.baseCache
 }
 
 // EvalOption defines a function to set an option on an EvalConfig
@@ -372,6 +378,16 @@ func EvalVirtualCache(vc topdown.VirtualCache) EvalOption {
 	}
 }
 
+// EvalBaseCache sets the topdown.BaseCache to use for evaluation. If not set,
+// a query-scoped cache will be used to resolve references to parsed data
+// documents. See docs on topdown.BaseCache, topdown.NewQueryBaseCache() and
+// NewConcurrentBaseCache() for more information.
+func EvalBaseCache(bc topdown.BaseCache) EvalOption {
+	return func(e *EvalContext) {
+		e.baseCache = bc
+	}
+}
+
 func (pq preparedQuery) Modules() map[string]*ast.Module {
 	mods := make(map[string]*ast.Module)
 
@@ -412,6 +428,7 @@ func (pq preparedQuery) newEvalContext(ctx context.Context, options []EvalOption
 		printHook:           pq.r.printHook,
 		capabilities:        pq.r.capabilities,
 		strictBuiltinErrors: pq.r.strictBuiltinErrors,
+		baseCache:           pq.r.baseCache,
 	}
 
 	for _, o := range options {
@@ -612,6 +629,7 @@ type Rego struct {
 	interQueryBuiltinCache      cache.InterQueryCache
 	interQueryBuiltinValueCache cache.InterQueryValueCache
 	ndBuiltinCache              builtins.NDBCache
+	baseCache                   topdown.BaseCache
 	strictBuiltinErrors         bool
 	builtinErrorList            *[]topdown.Error
 	resolvers                   []refResolver
@@ -954,6 +972,16 @@ func Module(filename, input string) func(r *Rego) {
 			filename: filename,
 			module:   input,
 		})
+	}
+}
+
+// BaseCache returns an argument that sets the topdown.BaseCache to use for evaluation.
+// If not set, a query-scoped cache will be used to resolve references to parsed data
+// documents. When set on a prepared query intended for reuse, a concurrent implementation
+// as provided by topdown.NewConcurrentBaseCache() should be used.
+func BaseCache(bc topdown.BaseCache) func(r *Rego) {
+	return func(r *Rego) {
+		r.baseCache = bc
 	}
 }
 
@@ -1609,10 +1637,9 @@ func WithNoInline(paths []string) PrepareOption {
 func WithBuiltinFuncs(bis map[string]*topdown.Builtin) PrepareOption {
 	return func(p *PrepareConfig) {
 		if p.builtinFuncs == nil {
-			p.builtinFuncs = make(map[string]*topdown.Builtin, len(bis))
-		}
-		for k, v := range bis {
-			p.builtinFuncs[k] = v
+			p.builtinFuncs = maps.Clone(bis)
+		} else {
+			maps.Copy(p.builtinFuncs, bis)
 		}
 	}
 }
@@ -2162,7 +2189,8 @@ func (r *Rego) eval(ctx context.Context, ectx *EvalContext) (ResultSet, error) {
 		WithSeed(ectx.seed).
 		WithPrintHook(ectx.printHook).
 		WithDistributedTracingOpts(r.distributedTacingOpts).
-		WithVirtualCache(ectx.virtualCache)
+		WithVirtualCache(ectx.virtualCache).
+		WithBaseCache(ectx.baseCache)
 
 	if !ectx.time.IsZero() {
 		q = q.WithTime(ectx.time)
@@ -2566,7 +2594,7 @@ func (r *Rego) rewriteQueryToCaptureValue(_ ast.QueryCompiler, query ast.Body) (
 			expr.Terms = ast.Equality.Expr(terms, capture).Terms
 			r.capture[expr] = capture.Value.(ast.Var)
 		case []*ast.Term:
-			tpe := r.compiler.TypeEnv.Get(terms[0])
+			tpe := r.compiler.TypeEnv.Get(terms[0].Value)
 			if !types.Void(tpe) && types.Arity(tpe) == len(terms)-1 {
 				capture = r.generateTermVar()
 				expr.Terms = append(terms, capture)

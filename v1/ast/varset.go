@@ -6,7 +6,9 @@ package ast
 
 import (
 	"fmt"
-	"sort"
+	"slices"
+
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 // VarSet represents a set of variables.
@@ -14,11 +16,16 @@ type VarSet map[Var]struct{}
 
 // NewVarSet returns a new VarSet containing the specified variables.
 func NewVarSet(vs ...Var) VarSet {
-	s := VarSet{}
+	s := make(VarSet, len(vs))
 	for _, v := range vs {
 		s.Add(v)
 	}
 	return s
+}
+
+// NewVarSet returns a new VarSet containing the specified variables.
+func NewVarSetOfSize(size int) VarSet {
+	return make(VarSet, size)
 }
 
 // Add updates the set to include the variable "v".
@@ -34,7 +41,7 @@ func (s VarSet) Contains(v Var) bool {
 
 // Copy returns a shallow copy of the VarSet.
 func (s VarSet) Copy() VarSet {
-	cpy := VarSet{}
+	cpy := NewVarSetOfSize(len(s))
 	for v := range s {
 		cpy.Add(v)
 	}
@@ -43,31 +50,54 @@ func (s VarSet) Copy() VarSet {
 
 // Diff returns a VarSet containing variables in s that are not in vs.
 func (s VarSet) Diff(vs VarSet) VarSet {
-	r := VarSet{}
+	i := 0
+	for v := range s {
+		if !vs.Contains(v) {
+			i++
+		}
+	}
+
+	r := NewVarSetOfSize(i)
 	for v := range s {
 		if !vs.Contains(v) {
 			r.Add(v)
 		}
 	}
+
 	return r
 }
 
 // Equal returns true if s contains exactly the same elements as vs.
 func (s VarSet) Equal(vs VarSet) bool {
-	if len(s.Diff(vs)) > 0 {
+	if len(s) != len(vs) {
 		return false
 	}
-	return len(vs.Diff(s)) == 0
+
+	for v := range s {
+		if !vs.Contains(v) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // Intersect returns a VarSet containing variables in s that are in vs.
 func (s VarSet) Intersect(vs VarSet) VarSet {
-	r := VarSet{}
+	i := 0
+	for v := range s {
+		if vs.Contains(v) {
+			i++
+		}
+	}
+
+	r := NewVarSetOfSize(i)
 	for v := range s {
 		if vs.Contains(v) {
 			r.Add(v)
 		}
 	}
+
 	return r
 }
 
@@ -77,9 +107,7 @@ func (s VarSet) Sorted() []Var {
 	for v := range s {
 		sorted = append(sorted, v)
 	}
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Compare(sorted[j]) < 0
-	})
+	slices.SortFunc(sorted, VarCompare)
 	return sorted
 }
 
@@ -91,10 +119,5 @@ func (s VarSet) Update(vs VarSet) {
 }
 
 func (s VarSet) String() string {
-	tmp := make([]string, 0, len(s))
-	for v := range s {
-		tmp = append(tmp, string(v))
-	}
-	sort.Strings(tmp)
-	return fmt.Sprintf("%v", tmp)
+	return fmt.Sprintf("%v", util.KeysSorted(s))
 }

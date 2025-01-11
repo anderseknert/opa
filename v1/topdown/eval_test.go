@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -1646,6 +1647,85 @@ func TestContextErrorHandling(t *testing.T) {
 
 			if et := tc.expErrType; et != nil && !errors.Is(err, tc.expErrType) {
 				t.Fatalf("Expected error to be of type %#v, but got %#v", et, err)
+			}
+		})
+	}
+}
+
+func TestFormatVarTerm(t *testing.T) {
+	e := &eval{
+		genvarprefix: "foobar",
+		queryID:      12345,
+		index:        54321,
+	}
+
+	res := formatVarTerm(e.genvarprefix, e.queryID, e.index)
+
+	if res != "foobar_term_12345_54321" {
+		t.Fatalf("Expected foobar_term_12345_54321 but got %s", res)
+	}
+
+	res = fmt.Sprintf("%s_term_%d_%d", e.genvarprefix, e.queryID, e.index)
+
+	if res != "foobar_term_12345_54321" {
+		t.Fatalf("Expected foobar_term_12345_54321 but got %s", res)
+	}
+}
+
+// Comparison with fmt.Sprintf:
+// fmt.sprintf        8093799   159.41 ns/op      56 B/op       4 allocs/op
+// formatVarTerm     20424126    50.95 ns/op      32 B/op       1 allocs/op
+func BenchmarkFormatVarTerm(b *testing.B) {
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	e := &eval{
+		genvarprefix: "foobar",
+		queryID:      12345,
+		index:        54321,
+	}
+
+	for i := 0; i < b.N; i++ {
+		_ = formatVarTerm(e.genvarprefix, e.queryID, e.index)
+	}
+}
+
+func TestObjectsConflict(t *testing.T) {
+	ctx := context.Background()
+	store := inmem.New()
+
+	tests := []struct {
+		note   string
+		module string
+		query  string
+		exp    string
+	}{
+		{
+			note: "partial object (general ref head) generating conflicting ref vars",
+			module: `package test
+				p["a"] := 1
+				p["a"] := 2`,
+			query: `data.test.p = x`,
+			exp:   "eval_conflict_error: object keys must be unique",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.note, func(t *testing.T) {
+			t.Parallel()
+
+			compiler := compileModules([]string{tc.module})
+			txn := storage.NewTransactionOrDie(ctx, store)
+			defer store.Abort(ctx, txn)
+
+			query := NewQuery(ast.MustParseBody(tc.query)).
+				WithCompiler(compiler).
+				WithStore(store).
+				WithTransaction(txn)
+
+			qrs, err := query.Run(ctx)
+			if err == nil {
+				t.Fatalf("Expected error %v but got result: %v", tc.exp, qrs)
 			}
 		})
 	}

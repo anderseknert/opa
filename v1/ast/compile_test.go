@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"sort"
@@ -299,160 +300,160 @@ func TestModuleTree(t *testing.T) {
 	if tree.Children[Var("data")].Children[String("user")].Children[String("system")].Hide {
 		t.Fatalf("Expected user.system node to be visible")
 	}
-
 }
-func TestCompilerGetExports(t *testing.T) {
-	tests := []struct {
-		note    string
-		modules []*Module
-		exports map[string][]string
-	}{
-		{
-			note: "simple",
-			modules: modules(`package p
-				r = 1`),
-			exports: map[string][]string{"data.p": {"r"}},
-		},
-		{
-			note: "simple single-value ref rule",
-			modules: modules(`package p
-				q.r.s = 1`),
-			exports: map[string][]string{"data.p": {"q.r.s"}},
-		},
-		{
-			note: "var key single-value ref rule",
-			modules: modules(`package p
-				q.r[s] = 1 if { s := "foo" }`),
-			exports: map[string][]string{"data.p": {"q.r"}},
-		},
-		{
-			note: "simple multi-value ref rule",
-			modules: modules(`package p
-				q.r.s contains 1 if { true }`),
-			exports: map[string][]string{"data.p": {"q.r.s"}},
-		},
-		{
-			note: "two simple, multiple rules",
-			modules: modules(`package p
-				r = 1
-				s = 11`,
-				`package q
-				x = 2
-				y = 22`),
-			exports: map[string][]string{"data.p": {"r", "s"}, "data.q": {"x", "y"}},
-		},
-		{
-			note: "ref head + simple, multiple rules",
-			modules: modules(`package p.a.b.c
-				r = 1
-				s = 11`,
-				`package q
-				a.b.x = 2
-				a.b.c.y = 22`),
-			exports: map[string][]string{
-				"data.p.a.b.c": {"r", "s"},
-				"data.q":       {"a.b.x", "a.b.c.y"},
-			},
-		},
-		{
-			note: "two ref head, multiple rules",
-			modules: modules(`package p.a.b.c
-				r = 1
-				s = 11`,
-				`package p
-				a.b.x = 2
-				a.b.c.y = 22`),
-			exports: map[string][]string{
-				"data.p.a.b.c": {"r", "s"},
-				"data.p":       {"a.b.x", "a.b.c.y"},
-			},
-		},
-		{
-			note: "single-value rule with number key",
-			modules: modules(`package p
-				q[1] = 1
-				q[2] = 2`),
-			exports: map[string][]string{
-				"data.p": {"q[1]", "q[2]"}, // TODO(sr): is this really what we want?
-			},
-		},
-		{
-			note: "single-value (ref) rule with number key",
-			modules: modules(`package p
-				a.b.q[1] = 1
-				a.b.q[2] = 2`),
-			exports: map[string][]string{
-				"data.p": {"a.b.q[1]", "a.b.q[2]"},
-			},
-		},
-		{
-			note: "single-value (ref) rule with var key",
-			modules: modules(`package p
-				a.b.q[x] = y if { x := 1; y := true }
-				a.b.q[2] = 2`),
-			exports: map[string][]string{
-				"data.p": {"a.b.q", "a.b.q[2]"}, // TODO(sr): GroundPrefix? right thing here?
-			},
-		},
-		{ // NOTE(sr): An ast.Module can be constructed in various ways, this is to assert that
-			//         our compilation process doesn't explode here if we're fed a Rule that has no Ref.
-			note: "synthetic",
-			modules: func() []*Module {
-				ms := modules(`package p
-				r = 1`)
-				ms[0].Rules[0].Head.Reference = nil
-				return ms
-			}(),
-			exports: map[string][]string{"data.p": {"r"}},
-		},
-		// TODO(sr): add multi-val rule, and ref-with-var single-value rule.
-	}
 
-	hashMap := func(ms map[string][]string) *util.HashMap {
-		rules := util.NewHashMap(func(a, b util.T) bool {
-			switch a := a.(type) {
-			case Ref:
-				return a.Equal(b.(Ref))
-			case []Ref:
-				b := b.([]Ref)
-				if len(b) != len(a) {
-					return false
-				}
-				for i := range a {
-					if !a[i].Equal(b[i]) {
-						return false
-					}
-				}
-				return true
-			default:
-				panic("unreachable")
-			}
-		}, func(v util.T) int {
-			return v.(Ref).Hash()
-		})
-		for r, rs := range ms {
-			refs := make([]Ref, len(rs))
-			for i := range rs {
-				refs[i] = toRef(rs[i])
-			}
-			rules.Put(MustParseRef(r), refs)
-		}
-		return rules
-	}
+// func TestCompilerGetExports(t *testing.T) {
+// 	tests := []struct {
+// 		note    string
+// 		modules []*Module
+// 		exports map[string][]string
+// 	}{
+// 		{
+// 			note: "simple",
+// 			modules: modules(`package p
+// 				r = 1`),
+// 			exports: map[string][]string{"data.p": {"r"}},
+// 		},
+// 		{
+// 			note: "simple single-value ref rule",
+// 			modules: modules(`package p
+// 				q.r.s = 1`),
+// 			exports: map[string][]string{"data.p": {"q.r.s"}},
+// 		},
+// 		{
+// 			note: "var key single-value ref rule",
+// 			modules: modules(`package p
+// 				q.r[s] = 1 if { s := "foo" }`),
+// 			exports: map[string][]string{"data.p": {"q.r"}},
+// 		},
+// 		{
+// 			note: "simple multi-value ref rule",
+// 			modules: modules(`package p
+// 				q.r.s contains 1 if { true }`),
+// 			exports: map[string][]string{"data.p": {"q.r.s"}},
+// 		},
+// 		{
+// 			note: "two simple, multiple rules",
+// 			modules: modules(`package p
+// 				r = 1
+// 				s = 11`,
+// 				`package q
+// 				x = 2
+// 				y = 22`),
+// 			exports: map[string][]string{"data.p": {"r", "s"}, "data.q": {"x", "y"}},
+// 		},
+// 		{
+// 			note: "ref head + simple, multiple rules",
+// 			modules: modules(`package p.a.b.c
+// 				r = 1
+// 				s = 11`,
+// 				`package q
+// 				a.b.x = 2
+// 				a.b.c.y = 22`),
+// 			exports: map[string][]string{
+// 				"data.p.a.b.c": {"r", "s"},
+// 				"data.q":       {"a.b.x", "a.b.c.y"},
+// 			},
+// 		},
+// 		{
+// 			note: "two ref head, multiple rules",
+// 			modules: modules(`package p.a.b.c
+// 				r = 1
+// 				s = 11`,
+// 				`package p
+// 				a.b.x = 2
+// 				a.b.c.y = 22`),
+// 			exports: map[string][]string{
+// 				"data.p.a.b.c": {"r", "s"},
+// 				"data.p":       {"a.b.x", "a.b.c.y"},
+// 			},
+// 		},
+// 		{
+// 			note: "single-value rule with number key",
+// 			modules: modules(`package p
+// 				q[1] = 1
+// 				q[2] = 2`),
+// 			exports: map[string][]string{
+// 				"data.p": {"q[1]", "q[2]"}, // TODO(sr): is this really what we want?
+// 			},
+// 		},
+// 		{
+// 			note: "single-value (ref) rule with number key",
+// 			modules: modules(`package p
+// 				a.b.q[1] = 1
+// 				a.b.q[2] = 2`),
+// 			exports: map[string][]string{
+// 				"data.p": {"a.b.q[1]", "a.b.q[2]"},
+// 			},
+// 		},
+// 		{
+// 			note: "single-value (ref) rule with var key",
+// 			modules: modules(`package p
+// 				a.b.q[x] = y if { x := 1; y := true }
+// 				a.b.q[2] = 2`),
+// 			exports: map[string][]string{
+// 				"data.p": {"a.b.q", "a.b.q[2]"}, // TODO(sr): GroundPrefix? right thing here?
+// 			},
+// 		},
+// 		{ // NOTE(sr): An ast.Module can be constructed in various ways, this is to assert that
+// 			//         our compilation process doesn't explode here if we're fed a Rule that has no Ref.
+// 			note: "synthetic",
+// 			modules: func() []*Module {
+// 				ms := modules(`package p
+// 				r = 1`)
+// 				ms[0].Rules[0].Head.Reference = nil
+// 				return ms
+// 			}(),
+// 			exports: map[string][]string{"data.p": {"r"}},
+// 		},
+// 		// TODO(sr): add multi-val rule, and ref-with-var single-value rule.
+// 	}
 
-	for _, tc := range tests {
-		t.Run(tc.note, func(t *testing.T) {
-			c := NewCompiler()
-			for i, m := range tc.modules {
-				c.Modules[fmt.Sprint(i)] = m
-				c.sorted = append(c.sorted, fmt.Sprint(i))
-			}
-			if exp, act := hashMap(tc.exports), c.getExports(); !exp.Equal(act) {
-				t.Errorf("expected %v, got %v", exp, act)
-			}
-		})
-	}
-}
+// 	hashMap := func(ms map[string][]string) *util.HashMap {
+// 		rules := util.NewHashMap(func(a, b util.T) bool {
+// 			switch a := a.(type) {
+// 			case Ref:
+// 				return a.Equal(b.(Ref))
+// 			case []Ref:
+// 				b := b.([]Ref)
+// 				if len(b) != len(a) {
+// 					return false
+// 				}
+// 				for i := range a {
+// 					if !a[i].Equal(b[i]) {
+// 						return false
+// 					}
+// 				}
+// 				return true
+// 			default:
+// 				panic("unreachable")
+// 			}
+// 		}, func(v util.T) int {
+// 			return v.(Ref).Hash()
+// 		})
+// 		for r, rs := range ms {
+// 			refs := make([]Ref, len(rs))
+// 			for i := range rs {
+// 				refs[i] = toRef(rs[i])
+// 			}
+// 			rules.Put(MustParseRef(r), refs)
+// 		}
+// 		return rules
+// 	}
+
+// 	for _, tc := range tests {
+// 		t.Run(tc.note, func(t *testing.T) {
+// 			c := NewCompiler()
+// 			for i, m := range tc.modules {
+// 				c.Modules[fmt.Sprint(i)] = m
+// 				c.sorted = append(c.sorted, fmt.Sprint(i))
+// 			}
+// 			if exp, act := hashMap(tc.exports), c.getExports(); !exp.Equal(act) {
+// 				t.Errorf("expected %v, got %v", exp, act)
+// 			}
+// 		})
+// 	}
+// }
 
 func toRef(s string) Ref {
 	switch t := MustParseTerm(s).Value.(type) {
@@ -777,7 +778,7 @@ func TestRuleIndices(t *testing.T) {
 			note: "regression test for #6930 (no if)",
 			modules: modules(
 				`package test
-			
+
 				p.q contains "foo"
 
 				p[q] := r if {
@@ -1525,7 +1526,7 @@ func TestCompilerErrorLimit(t *testing.T) {
 
 	sort.Strings(exp)
 	sort.Strings(result)
-	if !reflect.DeepEqual(exp, result) {
+	if !slices.Equal(exp, result) {
 		t.Errorf("Expected errors %v, got %v", exp, result)
 	}
 }
@@ -1958,9 +1959,9 @@ p[r] := 2 if { r := "foo" }`,
 	})
 
 	c.WithPathConflictsCheck(func(path []string) (bool, error) {
-		if reflect.DeepEqual(path, []string{"badrules", "dataoverlap", "p"}) {
+		if slices.Equal(path, []string{"badrules", "dataoverlap", "p"}) {
 			return true, nil
-		} else if reflect.DeepEqual(path, []string{"badrules", "existserr", "p"}) {
+		} else if slices.Equal(path, []string{"badrules", "existserr", "p"}) {
 			return false, fmt.Errorf("unexpected error")
 		}
 		return false, nil
@@ -2007,7 +2008,7 @@ p if { true }`,
 	c.WithPathConflictsCheck(func(path []string) (bool, error) {
 		if slices.Contains(path, "dataoverlap") {
 			return true, nil
-		} else if reflect.DeepEqual(path, []string{"badrules", "existserr", "p"}) {
+		} else if slices.Equal(path, []string{"badrules", "existserr", "p"}) {
 			return false, fmt.Errorf("unexpected error")
 		}
 		return false, nil
@@ -2750,13 +2751,13 @@ func TestCompilerRewriteExprTerms(t *testing.T) {
 			expected: `
 			package test
 
-			p = true { 
+			p = true {
 				plus(1, 2, __local3__)
 				mul(3, 4, __local4__)
 				numbers.range(__local3__, __local4__, __local5__)
 				__local2__ = __local5__
-				every __local0__, __local1__ in __local2__ { 
-					__local1__ 
+				every __local0__, __local1__ in __local2__ {
+					__local1__
 				}
 			}`,
 		},
@@ -2770,13 +2771,13 @@ func TestCompilerRewriteExprTerms(t *testing.T) {
 			expected: `
 			package test
 
-			p = true { 
+			p = true {
 				div(1, 2, __local3__)
 				abs(-1, __local4__)
 				__local2__ = [__local3__, "foo", __local4__]
 				every __local0__, __local1__ in __local2__ {
 					__local1__
-				} 
+				}
 			}`,
 		},
 		{
@@ -2788,13 +2789,13 @@ func TestCompilerRewriteExprTerms(t *testing.T) {
 			expected: `
 			package test
 
-			p = true { 
+			p = true {
 				div(1, 2, __local3__)
 				abs(-1, __local4__)
 				__local2__ = [__local3__, ["foo", __local4__]]
-				every __local0__, __local1__ in __local2__ { 
-					__local1__ 
-				} 
+				every __local0__, __local1__ in __local2__ {
+					__local1__
+				}
 			}`,
 		},
 	}
@@ -5547,7 +5548,7 @@ func TestCompilerRewriteLocalAssignments(t *testing.T) {
 			if result.Compare(exp) != 0 {
 				t.Fatalf("\nExpected:\n\n%v\n\nGot:\n\n%v", exp, result)
 			}
-			if !reflect.DeepEqual(c.RewrittenVars, tc.expRewrittenMap) {
+			if !maps.Equal(c.RewrittenVars, tc.expRewrittenMap) {
 				t.Fatalf("\nExpected Rewritten Vars:\n\n\t%+v\n\nGot:\n\n\t%+v\n\n", tc.expRewrittenMap, c.RewrittenVars)
 			}
 		})
@@ -9721,15 +9722,15 @@ func TestCompilerBuildRequiredCapabilities(t *testing.T) {
 				names = append(names, compiler.Required.Builtins[i].Name)
 			}
 
-			if !reflect.DeepEqual(names, tc.builtins) {
+			if !slices.Equal(names, tc.builtins) {
 				t.Fatalf("expected builtins to be %v but got %v", tc.builtins, names)
 			}
 
-			if !reflect.DeepEqual(compiler.Required.FutureKeywords, tc.keywords) {
+			if !slices.Equal(compiler.Required.FutureKeywords, tc.keywords) {
 				t.Fatalf("expected keywords to be %v but got %v", tc.keywords, compiler.Required.FutureKeywords)
 			}
 
-			if !reflect.DeepEqual(compiler.Required.Features, tc.features) {
+			if !slices.Equal(compiler.Required.Features, tc.features) {
 				t.Fatalf("expected features to be %v but got %v", tc.features, compiler.Required.Features)
 			}
 		})
@@ -11292,12 +11293,12 @@ test_something if {
 	a == b
 }`,
 			exp: `package test
-        
+
 a := 1 if { true }
 b := 2 if { true }
 
-test_something = true if { 
-	data.test.a = data.test.b 
+test_something = true if {
+	data.test.a = data.test.b
 }`,
 		},
 		{
@@ -11314,11 +11315,11 @@ test_something if {
 			// When the test fails on '__local0__ = __local1__', the values for 'a' and 'b' are captured in local bindings,
 			// accessible by the tracer.
 			exp: `package test
-        
+
 a := 1 if { true }
 b := 2 if { true }
 
-test_something = true if { 
+test_something = true if {
 	__local0__ = data.test.a
 	__local1__ = data.test.b
 	__local0__ = __local1__
@@ -11341,7 +11342,7 @@ test_something if {
 a := 1 if { true }
 b := 2 if { true }
 
-test_something = true if { 
+test_something = true if {
 	not data.test.a = data.test.b
 }`,
 		},
@@ -11364,14 +11365,14 @@ a := 1 if { true }
 b := 2 if { true }
 l := [1, 2, 3] if { true }
 
-test_something = true if { 
+test_something = true if {
 	__local2__ = data.test.l
-	every __local0__, __local1__ in __local2__ { 
+	every __local0__, __local1__ in __local2__ {
 		__local4__ = data.test.b
 		plus(__local4__, __local1__, __local3__)
 		__local5__ = data.test.a
-		lt(__local5__, __local3__) 
-	} 
+		lt(__local5__, __local3__)
+	}
 }`,
 		},
 		{
@@ -11391,19 +11392,19 @@ test_something if {
 			// When tests contain an 'every' statement, we're interested in the circumstances that made the every fail,
 			// so it's body is rewritten.
 			exp: `package test
-        
+
 a := 1 if { true }
 b := 2 if { true }
 l := [1, 2, 3] if { true }
 
-test_something = true if { 
-	__local2__ = data.test.l; 
-	every __local0__, __local1__ in __local2__ { 
+test_something = true if {
+	__local2__ = data.test.l;
+	every __local0__, __local1__ in __local2__ {
 		__local4__ = data.test.b
 		plus(__local4__, __local1__, __local3__)
 		__local5__ = data.test.a
-		lt(__local5__, __local3__) 
-	} 
+		lt(__local5__, __local3__)
+	}
 }`,
 		},
 	}

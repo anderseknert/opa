@@ -29,10 +29,9 @@ type HashMap struct {
 // NewHashMap returns a new empty HashMap.
 func NewHashMap(eq func(T, T) bool, hash func(T) int) *HashMap {
 	return &HashMap{
-		eq:    eq,
-		hash:  hash,
-		table: make(map[int]*hashEntry),
-		size:  0,
+		eq:   eq,
+		hash: hash,
+		size: 0,
 	}
 }
 
@@ -63,6 +62,10 @@ func (h *HashMap) Equal(other *HashMap) bool {
 
 // Get returns the value for k.
 func (h *HashMap) Get(k T) (T, bool) {
+	if h.table == nil {
+		return nil, false
+	}
+
 	hash := h.hash(k)
 	for entry := h.table[hash]; entry != nil; entry = entry.next {
 		if h.eq(entry.k, k) {
@@ -74,6 +77,10 @@ func (h *HashMap) Get(k T) (T, bool) {
 
 // Delete removes the key k.
 func (h *HashMap) Delete(k T) {
+	if h.table == nil {
+		return
+	}
+
 	hash := h.hash(k)
 	var prev *hashEntry
 	for entry := h.table[hash]; entry != nil; entry = entry.next {
@@ -105,6 +112,10 @@ func (h *HashMap) Hash() int {
 // If the iter function never returns true, iteration proceeds through all elements
 // and the return value is false.
 func (h *HashMap) Iter(iter func(T, T) bool) bool {
+	if h.table == nil {
+		return false
+	}
+
 	for _, entry := range h.table {
 		for ; entry != nil; entry = entry.next {
 			if iter(entry.k, entry.v) {
@@ -123,6 +134,10 @@ func (h *HashMap) Len() int {
 // Put inserts a key/value pair into this HashMap. If the key is already present, the existing
 // value is overwritten.
 func (h *HashMap) Put(k T, v T) {
+	if h.table == nil {
+		h.table = map[int]*hashEntry{}
+	}
+
 	hash := h.hash(k)
 	head := h.table[hash]
 	for entry := head; entry != nil; entry = entry.next {

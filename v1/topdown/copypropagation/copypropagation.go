@@ -6,9 +6,10 @@ package copypropagation
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 // CopyPropagator implements a simple copy propagation optimization to remove
@@ -55,9 +56,7 @@ func New(livevars ast.VarSet) *CopyPropagator {
 		sorted = append(sorted, v)
 	}
 
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Compare(sorted[j]) < 0
-	})
+	slices.SortFunc(sorted, ast.VarCompare)
 
 	return &CopyPropagator{livevars: livevars, sorted: sorted, localvargen: &localVarGenerator{}}
 }
@@ -102,7 +101,7 @@ func (p *CopyPropagator) Apply(query ast.Body) ast.Body {
 		return false
 	})
 
-	removedEqs := ast.NewValueMap()
+	removedEqs := util.NewTypedHashMap[ast.Value, ast.Value](ast.ValueEqual)
 
 	for _, expr := range query {
 
@@ -140,7 +139,7 @@ func (p *CopyPropagator) Apply(query ast.Body) ast.Body {
 		if root, ok := uf.Find(v); ok {
 			if root.constant != nil {
 				result.Append(ast.Equality.Expr(ast.NewTerm(v), root.constant))
-			} else if b := removedEqs.Get(root.key); b != nil {
+			} else if b, ok := removedEqs.Get(root.key); ok {
 				result.Append(ast.Equality.Expr(ast.NewTerm(v), ast.NewTerm(b)))
 			} else if root.key != v {
 				result.Append(ast.Equality.Expr(ast.NewTerm(v), ast.NewTerm(root.key)))
@@ -259,8 +258,8 @@ func (t bindingPlugTransform) plugBindingsVar(pctx *plugContext, v ast.Var) ast.
 	if !ok {
 		return result
 	}
-	b := pctx.removedEqs.Get(v)
-	if b == nil {
+	b, ok := pctx.removedEqs.Get(v)
+	if !ok {
 		return result
 	}
 	if pctx.negated && !b.IsGround() {
@@ -285,7 +284,7 @@ func (t bindingPlugTransform) plugBindingsRef(pctx *plugContext, v ast.Ref) ast.
 
 	// Refs require special handling. If the head of the ref was killed, then
 	// the rest of the ref must be concatenated with the new base.
-	if b := pctx.removedEqs.Get(v[0].Value); b != nil {
+	if b, ok := pctx.removedEqs.Get(v[0].Value); ok {
 		if !pctx.negated || b.IsGround() {
 			var base ast.Ref
 			switch x := b.(type) {
@@ -375,7 +374,7 @@ func (p *CopyPropagator) updateBindingsEqAsymmetric(a, b *ast.Term) (ast.Var, as
 }
 
 type plugContext struct {
-	removedEqs *ast.ValueMap
+	removedEqs *util.TypedHashMap[ast.Value, ast.Value]
 	uf         *unionFind
 	headvars   ast.VarSet
 	negated    bool
@@ -421,14 +420,14 @@ func containedIn(value ast.Value, x interface{}) bool {
 	return stop
 }
 
-func sortbindings(bindings *ast.ValueMap) []*binding {
+func sortbindings(bindings *util.TypedHashMap[ast.Value, ast.Value]) []*binding {
 	sorted := make([]*binding, 0, bindings.Len())
 	bindings.Iter(func(k ast.Value, v ast.Value) bool {
 		sorted = append(sorted, &binding{k, v})
 		return false
 	})
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].k.Compare(sorted[j].k) > 0
+	slices.SortFunc(sorted, func(i, j *binding) int {
+		return -i.k.Compare(j.k)
 	})
 	return sorted
 }

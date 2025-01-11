@@ -138,6 +138,47 @@ func BenchmarkSplit(b *testing.B) {
 	}
 }
 
+// Now down to 2 allocations per iteration for ASCII strings, more for non-ASCII as that requires
+// string/rune conversion. 2 allocations unavoidable - 1 for the new Term and 1 for its Value.
+func BenchmarkSubstring(b *testing.B) {
+	operands := []*ast.Term{
+		// insert any non-asci character to see the difference of that optimization
+		ast.StringTerm("The quick brown fox jumps over the lazy dog"),
+		ast.InternedIntNumberTerm(6),
+		ast.InternedIntNumberTerm(10),
+	}
+
+	iter := eqIter(ast.StringTerm("ick brown "))
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if err := builtinSubstring(BuiltinContext{}, operands, iter); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// Unicode
+// BenchmarkIndexOf-10    	10498884	       114.0 ns/op	     176 B/op	       1 allocs/op
+//
+// ASCII
+// BenchmarkIndexOf-10    	36625468	        31.57 ns/op	       0 B/op	       0 allocs/op
+func BenchmarkIndexOf(b *testing.B) {
+	operands := []*ast.Term{
+		ast.StringTerm("The quick brown fox jumps over the lazy dog"),
+		ast.StringTerm("dog"),
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if err := builtinIndexOf(BuiltinContext{}, operands, eqIter(ast.InternedIntNumberTerm(40))); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func eqIter(a *ast.Term) func(*ast.Term) error {
 	return func(b *ast.Term) error {
 		if !a.Equal(b) {

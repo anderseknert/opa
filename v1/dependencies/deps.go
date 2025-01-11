@@ -6,7 +6,7 @@ package dependencies
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/util"
@@ -210,13 +210,9 @@ func (rs *dependencies) toSlice() []ast.Ref {
 }
 
 func dedup(refs []ast.Ref) []ast.Ref {
-	sort.Slice(refs, func(i, j int) bool {
-		return refs[i].Compare(refs[j]) < 0
-	})
+	slices.SortFunc(refs, ast.RefCompare)
 
-	return filter(refs, func(a, b ast.Ref) bool {
-		return a.Compare(b) == 0
-	})
+	return filter(refs, ast.RefEqual)
 }
 
 // filter removes all items from the list that cause pred to return true. It is

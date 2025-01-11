@@ -88,9 +88,8 @@ func arraySet(t1, t2 *ast.Term) (bool, *ast.Array, ast.Set) {
 // associated with a key.
 func objectSubset(super ast.Object, sub ast.Object) bool {
 	var superTerm *ast.Term
-	isSubset := true
 
-	sub.Until(func(key, subTerm *ast.Term) bool {
+	notSubset := sub.Until(func(key, subTerm *ast.Term) bool {
 		// This really wants to be a for loop, hence the somewhat
 		// weird internal structure. However, using Until() in this
 		// was is a performance optimization, as it avoids performing
@@ -101,7 +100,6 @@ func objectSubset(super ast.Object, sub ast.Object) bool {
 		// subTerm is can't be nil because we got it from Until(), so
 		// we only need to verify that super is non-nil.
 		if superTerm == nil {
-			isSubset = false
 			return true // break, not a subset
 		}
 
@@ -115,7 +113,6 @@ func objectSubset(super ast.Object, sub ast.Object) bool {
 		// do a normal comparison which will come up false.
 		if ok, superObj, subObj := bothObjects(superTerm, subTerm); ok {
 			if !objectSubset(superObj, subObj) {
-				isSubset = false
 				return true // break, not a subset
 			}
 
@@ -124,7 +121,6 @@ func objectSubset(super ast.Object, sub ast.Object) bool {
 
 		if ok, superSet, subSet := bothSets(superTerm, subTerm); ok {
 			if !setSubset(superSet, subSet) {
-				isSubset = false
 				return true // break, not a subset
 			}
 
@@ -133,7 +129,6 @@ func objectSubset(super ast.Object, sub ast.Object) bool {
 
 		if ok, superArray, subArray := bothArrays(superTerm, subTerm); ok {
 			if !arraySubset(superArray, subArray) {
-				isSubset = false
 				return true // break, not a subset
 			}
 
@@ -143,29 +138,25 @@ func objectSubset(super ast.Object, sub ast.Object) bool {
 		// We have already checked for exact equality, as well as for
 		// all of the types of nested subsets we care about, so if we
 		// get here it means this isn't a subset.
-		isSubset = false
 		return true // break, not a subset
 	})
 
-	return isSubset
+	return !notSubset
 }
 
 // setSubset implements the subset operation on sets.
 //
 // Unlike in the object case, this is not recursive, we just compare values
-// using ast.Set.Contains() because we have no well defined way to "match up"
+// using ast.Set.Contains() because we have no well-defined way to "match up"
 // objects that are in different sets.
 func setSubset(super ast.Set, sub ast.Set) bool {
-	isSubset := true
-	sub.Until(func(t *ast.Term) bool {
-		if !super.Contains(t) {
-			isSubset = false
-			return true
+	for _, elem := range sub.Slice() {
+		if !super.Contains(elem) {
+			return false
 		}
-		return false
-	})
+	}
 
-	return isSubset
+	return true
 }
 
 // arraySubset implements the subset operation on arrays.

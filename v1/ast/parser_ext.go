@@ -11,7 +11,6 @@
 package ast
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"strings"
@@ -186,7 +185,7 @@ func ParseRuleFromExpr(module *Module, expr *Expr) (*Rule, error) {
 			}
 			return ParsePartialSetDocRuleFromTerm(module, term)
 		default:
-			return nil, fmt.Errorf("%v cannot be used for rule name", TypeName(v))
+			return nil, fmt.Errorf("%v cannot be used for rule name", ValueName(v))
 		}
 	}
 
@@ -277,7 +276,7 @@ func ParseCompleteDocRuleFromEqExpr(module *Module, lhs, rhs *Term) (*Rule, erro
 			return nil, fmt.Errorf("ref not ground")
 		}
 	} else {
-		return nil, fmt.Errorf("%v cannot be used for rule name", TypeName(lhs.Value))
+		return nil, fmt.Errorf("%v cannot be used for rule name", ValueName(lhs.Value))
 	}
 	head.Value = rhs
 	head.Location = lhs.Location
@@ -299,7 +298,7 @@ func ParseCompleteDocRuleFromEqExpr(module *Module, lhs, rhs *Term) (*Rule, erro
 func ParseCompleteDocRuleWithDotsFromTerm(module *Module, term *Term) (*Rule, error) {
 	ref, ok := term.Value.(Ref)
 	if !ok {
-		return nil, fmt.Errorf("%v cannot be used for rule name", TypeName(term.Value))
+		return nil, fmt.Errorf("%v cannot be used for rule name", ValueName(term.Value))
 	}
 
 	if _, ok := ref[0].Value.(Var); !ok {
@@ -328,7 +327,7 @@ func ParseCompleteDocRuleWithDotsFromTerm(module *Module, term *Term) (*Rule, er
 func ParsePartialObjectDocRuleFromEqExpr(module *Module, lhs, rhs *Term) (*Rule, error) {
 	ref, ok := lhs.Value.(Ref)
 	if !ok {
-		return nil, fmt.Errorf("%v cannot be used as rule name", TypeName(lhs.Value))
+		return nil, fmt.Errorf("%v cannot be used as rule name", ValueName(lhs.Value))
 	}
 
 	if _, ok := ref[0].Value.(Var); !ok {
@@ -363,22 +362,24 @@ func ParsePartialSetDocRuleFromTerm(module *Module, term *Term) (*Rule, error) {
 
 	ref, ok := term.Value.(Ref)
 	if !ok || len(ref) == 1 {
-		return nil, fmt.Errorf("%vs cannot be used for rule head", TypeName(term.Value))
+		return nil, fmt.Errorf("%vs cannot be used for rule head", ValueName(term.Value))
 	}
 	if _, ok := ref[0].Value.(Var); !ok {
 		return nil, fmt.Errorf("invalid rule head: %v", ref)
 	}
 
-	head := RefHead(ref)
+	var head *Head
 	if len(ref) == 2 {
 		v, ok := ref[0].Value.(Var)
 		if !ok {
-			return nil, fmt.Errorf("%vs cannot be used for rule head", TypeName(term.Value))
+			return nil, fmt.Errorf("%vs cannot be used for rule head", ValueName(term.Value))
 		}
 		// Modify the code to add the location to the head ref
 		// and set the head ref's jsonOptions.
 		head = VarHead(v, ref[0].Location, &ref[0].jsonOptions)
 		head.Key = ref[1]
+	} else {
+		head = RefHead(ref)
 	}
 	head.Location = term.Location
 	head.jsonOptions = term.jsonOptions
@@ -408,7 +409,7 @@ func ParseRuleFromCallEqExpr(module *Module, lhs, rhs *Term) (*Rule, error) {
 
 	ref, ok := call[0].Value.(Ref)
 	if !ok {
-		return nil, fmt.Errorf("%vs cannot be used in function signature", TypeName(call[0].Value))
+		return nil, fmt.Errorf("%vs cannot be used in function signature", ValueName(call[0].Value))
 	}
 	if _, ok := ref[0].Value.(Var); !ok {
 		return nil, fmt.Errorf("invalid rule head: %v", ref)
@@ -470,7 +471,7 @@ func ParseImports(input string) ([]*Import, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := []*Import{}
+	result := make([]*Import, 0, len(stmts))
 	for _, stmt := range stmts {
 		if imp, ok := stmt.(*Import); ok {
 			result = append(result, imp)
@@ -514,7 +515,14 @@ func ParseBodyWithOpts(input string, popts ParserOptions) (Body, error) {
 		return nil, err
 	}
 
-	result := Body{}
+	l := 0
+	for i := range stmts {
+		if body, ok := stmts[i].(Body); ok {
+			l += len(body)
+		}
+	}
+
+	result := make(Body, 0, l)
 
 	for _, stmt := range stmts {
 		switch stmt := stmt.(type) {
@@ -561,8 +569,8 @@ func ParsePackage(input string) (*Package, error) {
 
 // ParseTerm returns exactly one term.
 // If multiple terms are parsed, an error is returned.
-func ParseTerm(input string) (*Term, error) {
-	body, err := ParseBody(input)
+func ParseTermWithOpts(input string, popts ParserOptions) (*Term, error) {
+	body, err := ParseBodyWithOpts(input, popts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse term: %w", err)
 	}
@@ -576,9 +584,20 @@ func ParseTerm(input string) (*Term, error) {
 	return term, nil
 }
 
+// ParseTerm returns exactly one term.
+// If multiple terms are parsed, an error is returned.
+func ParseTerm(input string) (*Term, error) {
+	return ParseTermWithOpts(input, ParserOptions{})
+}
+
 // ParseRef returns exactly one reference.
 func ParseRef(input string) (Ref, error) {
-	term, err := ParseTerm(input)
+	return ParseRefWithOpts(input, ParserOptions{})
+}
+
+// ParseRefWithOpts returns exactly one reference.
+func ParseRefWithOpts(input string, popts ParserOptions) (Ref, error) {
+	term, err := ParseTermWithOpts(input, popts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse ref: %w", err)
 	}
@@ -649,7 +668,7 @@ func ParseStatementsWithOpts(filename, input string, popts ParserOptions) ([]Sta
 
 	parser := NewParser().
 		WithFilename(filename).
-		WithReader(bytes.NewBufferString(input)).
+		WithReader(strings.NewReader(input)).
 		WithProcessAnnotation(popts.ProcessAnnotation).
 		WithFutureKeywords(popts.FutureKeywords...).
 		WithAllFutureKeywords(popts.AllFutureKeywords).
@@ -700,7 +719,7 @@ func parseModule(filename string, stmts []Statement, comments []*Comment, regoCo
 		switch stmt := stmt.(type) {
 		case *Import:
 			mod.Imports = append(mod.Imports, stmt)
-			if mod.regoVersion == RegoV0 && Compare(stmt.Path.Value, RegoV1CompatibleRef) == 0 {
+			if mod.regoVersion == RegoV0 && RegoV1CompatibleRef.Compare(stmt.Path.Value) == 0 {
 				mod.regoVersion = RegoV0CompatV1
 			}
 		case *Rule:

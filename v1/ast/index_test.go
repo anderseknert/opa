@@ -94,7 +94,7 @@ func TestBaseDocEqIndexing(t *testing.T) {
 		input.x = 3
 		input.y = 4
 	}
-		
+
 
 	scalars if {
 		input.x = 0
@@ -829,6 +829,7 @@ func TestBaseDocEqIndexingPriorities(t *testing.T) {
 	input := MustParseTerm(`{"x": "x1", "y": "y1", "z": "z1"}`)
 
 	result, err := index.Lookup(testResolver{input: input})
+	defer IndexResultPool.Put(result)
 	if err != nil {
 		t.Fatalf("Unexpected error during index lookup: %v", err)
 	}
@@ -1010,12 +1011,12 @@ func TestSkipIndexing(t *testing.T) {
 
 	index := newBaseDocEqIndex(func(Ref) bool { return false })
 
-	ok := index.Build(module.Rules)
-	if !ok {
+	if ok := index.Build(module.Rules); !ok {
 		t.Fatal("expected index build to succeed")
 	}
 
 	result, err := index.Lookup(testResolver{input: MustParseTerm(`{}`)})
+	defer IndexResultPool.Put(result)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1378,6 +1379,7 @@ r = local0 if {
 				result, err = index.AllRules(testResolver{input: input, unknownRefs: unknownRefs})
 			} else {
 				result, err = index.Lookup(testResolver{input: input, unknownRefs: unknownRefs})
+				defer IndexResultPool.Put(result)
 			}
 			if err != nil {
 				t.Fatalf("Unexpected error during index lookup: %v", err)

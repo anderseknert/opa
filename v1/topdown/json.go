@@ -231,7 +231,7 @@ func pathsToObject(paths []ast.Ref) ast.Object {
 		}
 
 		if !done {
-			node.Insert(path[len(path)-1], ast.NullTerm())
+			node.Insert(path[len(path)-1], ast.InternedNullTerm)
 		}
 	}
 

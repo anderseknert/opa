@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"net/url"
 	"regexp"
@@ -23,6 +24,7 @@ import (
 	"github.com/open-policy-agent/opa/v1/ast/internal/tokens"
 	astJSON "github.com/open-policy-agent/opa/v1/ast/json"
 	"github.com/open-policy-agent/opa/v1/ast/location"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 var RegoV1CompatibleRef = Ref{VarTerm("rego"), StringTerm("v1")}
@@ -103,7 +105,7 @@ func (s *state) Text(offset, end int) []byte {
 	bs := s.s.Bytes()
 	if offset >= 0 && offset < len(bs) {
 		if end >= offset && end <= len(bs) {
-			return bs[offset:end]
+			return bs[offset:end:end]
 		}
 	}
 	return nil
@@ -306,32 +308,20 @@ func (p *Parser) presentParser() (*Parser, map[string]tokens.Token) {
 	return &q, cpy
 }
 
-// Parse will read the Rego source and parse statements and
-// comments as they are found. Any errors encountered while
-// parsing will be accumulated and returned as a list of Errors.
-func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
-
-	if p.po.Capabilities == nil {
-		p.po.Capabilities = CapabilitiesForThisVersion(CapabilitiesRegoVersion(p.po.RegoVersion))
-	}
-
-	allowedFutureKeywords := map[string]tokens.Token{}
+func (p *Parser) keywords() (map[string]tokens.Token, map[string]tokens.Token, error) {
+	allowedFutureKeywords := make(map[string]tokens.Token, len(allFutureKeywords))
 
 	if p.po.EffectiveRegoVersion() == RegoV1 {
 		if !p.po.Capabilities.ContainsFeature(FeatureRegoV1) {
-			return nil, nil, Errors{
-				&Error{
-					Code:     ParseErr,
-					Message:  "illegal capabilities: rego_v1 feature required for parsing v1 Rego",
-					Location: nil,
-				},
+			return nil, nil, &Error{
+				Code:     ParseErr,
+				Message:  "illegal capabilities: rego_v1 feature required for parsing v1 Rego",
+				Location: nil,
 			}
 		}
 
 		// rego-v1 includes all v0 future keywords in the default language definition
-		for k, v := range futureKeywordsV0 {
-			allowedFutureKeywords[k] = v
-		}
+		maps.Copy(allowedFutureKeywords, futureKeywordsV0)
 
 		for _, kw := range p.po.Capabilities.FutureKeywords {
 			if tok, ok := futureKeywords[kw]; ok {
@@ -339,12 +329,10 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 			} else {
 				// For sake of error reporting, we still need to check that keywords in capabilities are known in v0
 				if _, ok := futureKeywordsV0[kw]; !ok {
-					return nil, nil, Errors{
-						&Error{
-							Code:     ParseErr,
-							Message:  fmt.Sprintf("illegal capabilities: unknown keyword: %v", kw),
-							Location: nil,
-						},
+					return nil, nil, &Error{
+						Code:     ParseErr,
+						Message:  fmt.Sprintf("illegal capabilities: unknown keyword: %v", kw),
+						Location: nil,
 					}
 				}
 			}
@@ -353,12 +341,10 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 		// Check that explicitly requested future keywords are known.
 		for _, kw := range p.po.FutureKeywords {
 			if _, ok := allowedFutureKeywords[kw]; !ok {
-				return nil, nil, Errors{
-					&Error{
-						Code:     ParseErr,
-						Message:  fmt.Sprintf("unknown future keyword: %v", kw),
-						Location: nil,
-					},
+				return nil, nil, &Error{
+					Code:     ParseErr,
+					Message:  fmt.Sprintf("unknown future keyword: %v", kw),
+					Location: nil,
 				}
 			}
 		}
@@ -367,22 +353,48 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 			var ok bool
 			allowedFutureKeywords[kw], ok = allFutureKeywords[kw]
 			if !ok {
-				return nil, nil, Errors{
-					&Error{
-						Code:     ParseErr,
-						Message:  fmt.Sprintf("illegal capabilities: unknown keyword: %v", kw),
-						Location: nil,
-					},
+				return nil, nil, &Error{
+					Code:     ParseErr,
+					Message:  fmt.Sprintf("illegal capabilities: unknown keyword: %v", kw),
+					Location: nil,
 				}
 			}
 		}
 
 		if p.po.Capabilities.ContainsFeature(FeatureRegoV1) {
 			// rego-v1 includes all v0 future keywords in the default language definition
-			for k, v := range futureKeywordsV0 {
-				allowedFutureKeywords[k] = v
-			}
+			maps.Copy(allowedFutureKeywords, futureKeywordsV0)
 		}
+	}
+
+	var selected map[string]tokens.Token
+	if p.po.AllFutureKeywords || p.po.EffectiveRegoVersion() == RegoV1 {
+		selected = make(map[string]tokens.Token, len(allowedFutureKeywords))
+		maps.Copy(selected, allowedFutureKeywords)
+	} else {
+		selected = make(map[string]tokens.Token, len(p.po.FutureKeywords))
+		for _, kw := range p.po.FutureKeywords {
+			tok, ok := allowedFutureKeywords[kw]
+			if !ok {
+				return nil, nil, &Error{
+					Code:     ParseErr,
+					Message:  fmt.Sprintf("unknown future keyword: %v", kw),
+					Location: nil,
+				}
+			}
+			selected[kw] = tok
+		}
+	}
+
+	return allowedFutureKeywords, selected, nil
+}
+
+// Parse will read the Rego source and parse statements and
+// comments as they are found. Any errors encountered while
+// parsing will be accumulated and returned as a list of Errors.
+func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
+	if p.po.Capabilities == nil {
+		p.po.Capabilities = CapabilitiesForThisVersion(CapabilitiesRegoVersion(p.po.RegoVersion))
 	}
 
 	var err error
@@ -397,26 +409,11 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 		}
 	}
 
-	selected := map[string]tokens.Token{}
-	if p.po.AllFutureKeywords || p.po.EffectiveRegoVersion() == RegoV1 {
-		for kw, tok := range allowedFutureKeywords {
-			selected[kw] = tok
-		}
-	} else {
-		for _, kw := range p.po.FutureKeywords {
-			tok, ok := allowedFutureKeywords[kw]
-			if !ok {
-				return nil, nil, Errors{
-					&Error{
-						Code:     ParseErr,
-						Message:  fmt.Sprintf("unknown future keyword: %v", kw),
-						Location: nil,
-					},
-				}
-			}
-			selected[kw] = tok
-		}
+	allowedFutureKeywords, selected, err := p.keywords()
+	if err != nil {
+		return nil, nil, Errors{err.(*Error)}
 	}
+
 	p.s.s = p.s.s.WithKeywords(selected)
 
 	if p.po.EffectiveRegoVersion() == RegoV1 {
@@ -511,8 +508,7 @@ func (p *Parser) Parse() ([]Statement, []*Comment, Errors) {
 }
 
 func (p *Parser) parseAnnotations(stmts []Statement) []Statement {
-
-	annotStmts, errs := parseAnnotations(p.s.comments)
+	annotStmts, errs := parseAnnotations(p.s.comments, &p.po)
 	for _, err := range errs {
 		p.error(err.Location, err.Message)
 	}
@@ -524,42 +520,49 @@ func (p *Parser) parseAnnotations(stmts []Statement) []Statement {
 	return stmts
 }
 
-func parseAnnotations(comments []*Comment) ([]*Annotations, Errors) {
+var annotationsHint = []byte("METADATA")
 
-	var hint = []byte("METADATA")
-	var curr *metadataParser
-	var blocks []*metadataParser
+func moreInBlock(comments []*Comment, i int) bool {
+	return comments[i].Location.Row == comments[i-1].Location.Row+1 &&
+		comments[i].Location.Col == 1
+}
 
-	for i := 0; i < len(comments); i++ {
-		if curr != nil {
-			if comments[i].Location.Row == comments[i-1].Location.Row+1 && comments[i].Location.Col == 1 {
-				curr.Append(comments[i])
-				continue
-			}
-			curr = nil
-		}
-		if bytes.HasPrefix(bytes.TrimSpace(comments[i].Text), hint) {
-			curr = newMetadataParser(comments[i].Location)
-			blocks = append(blocks, curr)
-		}
-	}
+func parseAnnotations(comments []*Comment, popts *ParserOptions) ([]*Annotations, Errors) {
+	mp := &metadataParser{buf: bytes.Buffer{}, popts: popts}
 
 	var stmts []*Annotations
 	var errs Errors
-	for _, b := range blocks {
-		a, err := b.Parse()
-		if err != nil {
-			errs = append(errs, &Error{
-				Code:     ParseErr,
-				Message:  err.Error(),
-				Location: b.loc,
-			})
-		} else {
-			stmts = append(stmts, a)
+	var inBlock bool
+
+	for i := 0; i < len(comments); i++ {
+		if inBlock {
+			if moreInBlock(comments, i) {
+				mp.append(comments[i])
+				if i != len(comments)-1 {
+					continue
+				}
+			}
+			inBlock = false
+
+			if a, err := mp.Parse(); err != nil {
+				errs = append(errs, &Error{Code: ParseErr, Message: err.Error(), Location: mp.loc})
+			} else {
+				stmts = append(stmts, a)
+			}
+		}
+		if bytes.HasPrefix(bytes.TrimSpace(comments[i].Text), annotationsHint) {
+			inBlock = true
+			mp.reset(comments[i].Location)
 		}
 	}
 
 	return stmts, errs
+}
+
+func SetTermValue[V Value](t *Term, value V) {
+	c := *t
+	c.Value = value
+	*t = c
 }
 
 func (p *Parser) parsePackage() *Package {
@@ -591,7 +594,7 @@ func (p *Parser) parsePackage() *Package {
 			pkg.Path[0] = DefaultRootDocument.Copy().SetLocation(v[0].Location)
 			first, ok := v[0].Value.(Var)
 			if !ok {
-				p.errorf(v[0].Location, "unexpected %v token: expecting var", TypeName(v[0].Value))
+				p.errorf(v[0].Location, "unexpected %v token: expecting var", ValueName(v[0].Value))
 				return nil
 			}
 			pkg.Path[1] = StringTerm(string(first)).SetLocation(v[0].Location)
@@ -600,7 +603,7 @@ func (p *Parser) parsePackage() *Package {
 				case String:
 					pkg.Path[i] = v[i-1]
 				default:
-					p.errorf(v[i-1].Location, "unexpected %v token: expecting string", TypeName(v[i-1].Value))
+					p.errorf(v[i-1].Location, "unexpected %v token: expecting string", ValueName(v[i-1].Value))
 					return nil
 				}
 			}
@@ -643,7 +646,7 @@ func (p *Parser) parseImport() *Import {
 		case Ref:
 			for i := 1; i < len(v); i++ {
 				if _, ok := v[i].Value.(String); !ok {
-					p.errorf(v[i].Location, "unexpected %v token: expecting string", TypeName(v[i].Value))
+					p.errorf(v[i].Location, "unexpected %v token: expecting string", ValueName(v[i].Value))
 					return nil
 				}
 			}
@@ -842,11 +845,14 @@ func (p *Parser) parseRules() []*Rule {
 		loc := p.s.Loc()
 
 		p.scan()
-		var next Rule
 
-		if next.Body = p.parseBody(tokens.RBrace); next.Body == nil {
+		body := p.parseBody(tokens.RBrace)
+		if body == nil {
 			return nil
 		}
+
+		next := &Rule{Body: body}
+
 		p.scan()
 
 		loc.Text = p.s.Text(loc.Offset, p.s.lastEnd)
@@ -859,12 +865,12 @@ func (p *Parser) parseRules() []*Rule {
 		next.Head.keywords = rule.Head.keywords
 		for i := range next.Head.Args {
 			if v, ok := next.Head.Args[i].Value.(Var); ok && v.IsWildcard() {
-				next.Head.Args[i].Value = Var(p.genwildcard())
+				next.Head.Args[i].Value = p.genWildcardVar()
 			}
 		}
 		setLocRecursive(next.Head, loc)
 
-		rules = append(rules, &next)
+		rules = append(rules, next)
 	}
 
 	return rules
@@ -879,7 +885,7 @@ func (p *Parser) parseElse(head *Head) *Rule {
 	rule.Head.generatedValue = false
 	for i := range rule.Head.Args {
 		if v, ok := rule.Head.Args[i].Value.(Var); ok && v.IsWildcard() {
-			rule.Head.Args[i].Value = Var(p.genwildcard())
+			rule.Head.Args[i].Value = p.genWildcardVar()
 		}
 	}
 	rule.Head.SetLoc(p.s.Loc())
@@ -893,7 +899,12 @@ func (p *Parser) parseElse(head *Head) *Rule {
 	switch p.s.tok {
 	case tokens.LBrace, tokens.If: // no value, but a body follows directly
 		rule.Head.generatedValue = true
-		rule.Head.Value = BooleanTerm(true)
+		// Note that we never set a location for this term, so we are able
+		// to use the interned true term here. This isn't consistent with
+		// what we do for other generated terms, where we often set a bogus
+		// location... but as long as no one is complaining, we might as well
+		// avoid and extra allocation.
+		rule.Head.Value = InternedBooleanTerm(true)
 	case tokens.Assign, tokens.Unify:
 		rule.Head.Assign = tokens.Assign == p.s.tok
 		p.scan()
@@ -949,7 +960,7 @@ func (p *Parser) parseElse(head *Head) *Rule {
 }
 
 func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
-	head := &Head{}
+	var head *Head
 	loc := p.s.Loc()
 	defer func() {
 		if head != nil {
@@ -996,7 +1007,7 @@ func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
 		return nil, false
 	}
 
-	name := head.Ref().String()
+	name := head.Reference.String()
 
 	switch p.s.tok {
 	case tokens.Contains: // NOTE: no Value for `contains` heads, we return here
@@ -1652,14 +1663,20 @@ func (p *Parser) parseNumber() *Term {
 
 func (p *Parser) parseString() *Term {
 	if p.s.lit[0] == '"' {
+		if !strings.Contains(p.s.lit, "\\") {
+			// If string contains no escape sequences, we save 4 allocations
+			// by avoiding the json.Unmarshal call and instead returning the
+			// string as is.
+			return StringTerm(p.s.lit[1 : len(p.s.lit)-1]).SetLocation(p.s.Loc())
+		}
+
 		var s string
 		err := json.Unmarshal([]byte(p.s.lit), &s)
 		if err != nil {
 			p.errorf(p.s.Loc(), "illegal string literal: %s", p.s.lit)
 			return nil
 		}
-		term := StringTerm(s).SetLocation(p.s.Loc())
-		return term
+		return StringTerm(s).SetLocation(p.s.Loc())
 	}
 	return p.parseRawString()
 }
@@ -1668,8 +1685,7 @@ func (p *Parser) parseRawString() *Term {
 	if len(p.s.lit) < 2 {
 		return nil
 	}
-	term := StringTerm(p.s.lit[1 : len(p.s.lit)-1]).SetLocation(p.s.Loc())
-	return term
+	return StringTerm(p.s.lit[1 : len(p.s.lit)-1]).SetLocation(p.s.Loc())
 }
 
 // this is the name to use for instantiating an empty set, e.g., `set()`.
@@ -1717,7 +1733,7 @@ func (p *Parser) parseRef(head *Term, offset int) (term *Term) {
 	case Var, *Array, Object, Set, *ArrayComprehension, *ObjectComprehension, *SetComprehension, Call:
 		// ok
 	default:
-		p.errorf(loc, "illegal ref (head cannot be %v)", TypeName(h))
+		p.errorf(loc, "illegal ref (head cannot be %v)", ValueName(h))
 	}
 
 	ref := []*Term{head}
@@ -2074,7 +2090,8 @@ func (p *Parser) parseTermPairList(end tokens.Token, r [][2]*Term) [][2]*Term {
 func (p *Parser) parseTermOp(values ...tokens.Token) *Term {
 	for i := range values {
 		if p.s.tok == values[i] {
-			r := RefTerm(VarTerm(fmt.Sprint(p.s.tok)).SetLocation(p.s.Loc())).SetLocation(p.s.Loc())
+			loc := p.s.Loc()
+			r := RefTerm(VarTerm(fmt.Sprint(p.s.tok)).SetLocation(loc)).SetLocation(loc)
 			p.scan()
 			return r
 		}
@@ -2106,16 +2123,17 @@ func (p *Parser) parseVar() *Term {
 
 	// Update wildcard values with unique identifiers
 	if term.Equal(Wildcard) {
-		term.Value = Var(p.genwildcard())
+		term.Value = p.genWildcardVar()
 	}
 
 	return term
 }
 
-func (p *Parser) genwildcard() string {
+func (p *Parser) genWildcardVar() Value {
 	c := p.s.wildcard
 	p.s.wildcard++
-	return fmt.Sprintf("%v%d", WildcardPrefix, c)
+
+	return Var(WildcardPrefix + strconv.Itoa(c))
 }
 
 func (p *Parser) error(loc *location.Location, reason string) {
@@ -2255,7 +2273,7 @@ func (p *Parser) save() *state {
 }
 
 func (p *Parser) restore(s *state) {
-	p.s = s
+	*p.s = *s
 }
 
 func setLocRecursive(x interface{}, loc *location.Location) {
@@ -2302,7 +2320,7 @@ func (p *Parser) validateDefaultRuleValue(rule *Rule) bool {
 func (p *Parser) validateDefaultRuleArgs(rule *Rule) bool {
 
 	valid := true
-	vars := NewVarSet()
+	vars := NewVarSetOfSize(len(rule.Head.Args))
 
 	vis := NewGenericVisitor(func(x interface{}) bool {
 		switch x := x.(type) {
@@ -2318,7 +2336,7 @@ func (p *Parser) validateDefaultRuleArgs(rule *Rule) bool {
 			switch v := x.Value.(type) {
 			case Var: // do nothing
 			default:
-				p.error(rule.Loc(), fmt.Sprintf("illegal default rule (arguments cannot contain %v)", TypeName(v)))
+				p.error(rule.Loc(), fmt.Sprintf("illegal default rule (arguments cannot contain %v)", ValueName(v)))
 				valid = false
 				return true
 			}
@@ -2346,31 +2364,34 @@ type rawAnnotation struct {
 }
 
 type metadataParser struct {
-	buf      *bytes.Buffer
+	buf      bytes.Buffer
 	comments []*Comment
 	loc      *location.Location
+	popts    *ParserOptions
 }
 
-func newMetadataParser(loc *Location) *metadataParser {
-	return &metadataParser{loc: loc, buf: bytes.NewBuffer(nil)}
-}
-
-func (b *metadataParser) Append(c *Comment) {
+func (b *metadataParser) append(c *Comment) {
 	b.buf.Write(bytes.TrimPrefix(c.Text, []byte(" ")))
 	b.buf.WriteByte('\n')
 	b.comments = append(b.comments, c)
 }
 
+func (b *metadataParser) reset(newLoc *location.Location) {
+	b.buf.Reset()
+	b.comments = nil
+	b.loc = newLoc
+}
+
 var yamlLineErrRegex = regexp.MustCompile(`^yaml:(?: unmarshal errors:[\n\s]*)? line ([[:digit:]]+):`)
 
+var nl = []byte{'\n'}
+
 func (b *metadataParser) Parse() (*Annotations, error) {
-
-	var raw rawAnnotation
-
 	if len(bytes.TrimSpace(b.buf.Bytes())) == 0 {
 		return nil, fmt.Errorf("expected METADATA block, found whitespace")
 	}
 
+	var raw rawAnnotation
 	if err := yaml.Unmarshal(b.buf.Bytes(), &raw); err != nil {
 		var comment *Comment
 		match := yamlLineErrRegex.FindStringSubmatch(err.Error())
@@ -2414,15 +2435,24 @@ func (b *metadataParser) Parse() (*Annotations, error) {
 
 		var a SchemaAnnotation
 		var err error
+		var popts ParserOptions
 
-		a.Path, err = ParseRef(k)
+		if b.popts != nil {
+			popts = *b.popts
+		} else {
+			popts = ParserOptions{}
+		}
+		// don't include location for these refs
+		popts.JSONOptions = nil
+
+		a.Path, err = ParseRefWithOpts(k, popts)
 		if err != nil {
 			return nil, fmt.Errorf("invalid document reference")
 		}
 
 		switch v := v.(type) {
 		case string:
-			a.Schema, err = parseSchemaRef(v)
+			a.Schema, err = parseSchemaRef(v, popts)
 			if err != nil {
 				return nil, err
 			}
@@ -2447,22 +2477,25 @@ func (b *metadataParser) Parse() (*Annotations, error) {
 		result.Authors = append(result.Authors, author)
 	}
 
-	result.Custom = make(map[string]interface{})
-	for k, v := range raw.Custom {
-		val, err := convertYAMLMapKeyTypes(v, nil)
-		if err != nil {
-			return nil, err
+	if raw.Custom != nil {
+		result.Custom = make(map[string]interface{})
+		for k, v := range raw.Custom {
+			val, err := convertYAMLMapKeyTypes(v, nil)
+			if err != nil {
+				return nil, err
+			}
+			result.Custom[k] = val
 		}
-		result.Custom[k] = val
 	}
 
-	result.Location = b.loc
+	lc := *b.loc
+	result.Location = &lc
 
 	// recreate original text of entire metadata block for location text attribute
 	sb := strings.Builder{}
 	sb.WriteString("# METADATA\n")
 
-	lines := bytes.Split(b.buf.Bytes(), []byte{'\n'})
+	lines := bytes.Split(b.buf.Bytes(), nl)
 
 	for _, line := range lines[:len(lines)-1] {
 		sb.WriteString("# ")
@@ -2522,10 +2555,9 @@ var errInvalidSchemaRef = fmt.Errorf("invalid schema reference")
 // NOTE(tsandall): 'schema' is not registered as a root because it's not
 // supported by the compiler or evaluator today. Once we fix that, we can remove
 // this function.
-func parseSchemaRef(s string) (Ref, error) {
+func parseSchemaRef(s string, popts ParserOptions) (Ref, error) {
 
-	term, err := ParseTerm(s)
-	if err == nil {
+	if term, err := ParseTermWithOpts(s, popts); err == nil {
 		switch v := term.Value.(type) {
 		case Var:
 			if term.Equal(SchemaRootDocument) {
@@ -2705,10 +2737,7 @@ func (p *Parser) futureImport(imp *Import, allowedFutureKeywords map[string]toke
 		return
 	}
 
-	kwds := make([]string, 0, len(allowedFutureKeywords))
-	for k := range allowedFutureKeywords {
-		kwds = append(kwds, k)
-	}
+	kwds := util.Keys(allowedFutureKeywords)
 
 	switch len(path) {
 	case 2: // all keywords imported, nothing to do
@@ -2758,23 +2787,14 @@ func (p *Parser) regoV1Import(imp *Import) {
 	}
 
 	// import all future keywords with the rego.v1 import
-	kwds := make([]string, 0, len(futureKeywordsV0))
-	for k := range futureKeywordsV0 {
-		kwds = append(kwds, k)
-	}
-
 	p.s.s.SetRegoV1Compatible()
-	for _, kw := range kwds {
+	for _, kw := range util.Keys(futureKeywordsV0) {
 		p.s.s.AddKeyword(kw, futureKeywordsV0[kw])
 	}
 }
 
 func init() {
-	allFutureKeywords = map[string]tokens.Token{}
-	for k, v := range futureKeywords {
-		allFutureKeywords[k] = v
-	}
-	for k, v := range futureKeywordsV0 {
-		allFutureKeywords[k] = v
-	}
+	allFutureKeywords = make(map[string]tokens.Token, len(futureKeywords)+len(futureKeywordsV0))
+	maps.Copy(allFutureKeywords, futureKeywords)
+	maps.Copy(allFutureKeywords, futureKeywordsV0)
 }

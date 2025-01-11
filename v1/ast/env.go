@@ -29,12 +29,7 @@ func newTypeEnv(f func() *typeChecker) *TypeEnv {
 }
 
 // Get returns the type of x.
-func (env *TypeEnv) Get(x interface{}) types.Type {
-
-	if term, ok := x.(*Term); ok {
-		x = term.Value
-	}
-
+func (env *TypeEnv) Get(x Value) types.Type {
 	switch x := x.(type) {
 
 	// Scalars.
@@ -72,7 +67,7 @@ func (env *TypeEnv) Get(x interface{}) types.Type {
 			if IsConstant(k.Value) {
 				kjson, err := JSON(k.Value)
 				if err == nil {
-					tpe := env.Get(v)
+					tpe := env.Get(v.Value)
 					static = append(static, types.NewStaticProperty(kjson, tpe))
 					return
 				}
@@ -104,23 +99,23 @@ func (env *TypeEnv) Get(x interface{}) types.Type {
 	case *ArrayComprehension:
 		cpy, errs := env.newChecker().CheckBody(env, x.Body)
 		if len(errs) == 0 {
-			return types.NewArray(nil, cpy.Get(x.Term))
+			return types.NewArray(nil, cpy.Get(x.Term.Value))
 		}
 		return nil
 	case *ObjectComprehension:
 		cpy, errs := env.newChecker().CheckBody(env, x.Body)
 		if len(errs) == 0 {
-			return types.NewObject(nil, types.NewDynamicProperty(cpy.Get(x.Key), cpy.Get(x.Value)))
+			return types.NewObject(nil, types.NewDynamicProperty(cpy.Get(x.Key.Value), cpy.Get(x.Value.Value)))
 		}
 		return nil
 	case *SetComprehension:
 		cpy, errs := env.newChecker().CheckBody(env, x.Body)
 		if len(errs) == 0 {
-			return types.NewSet(cpy.Get(x.Term))
+			return types.NewSet(cpy.Get(x.Term.Value))
 		}
 		return nil
 
-	// Refs.
+	// Refs. Callers conscious about heap allocations should use GetByRef instead.
 	case Ref:
 		return env.getRef(x)
 
@@ -143,6 +138,10 @@ func (env *TypeEnv) Get(x interface{}) types.Type {
 	}
 }
 
+func (env *TypeEnv) GetByRef(ref Ref) types.Type {
+	return env.getRef(ref)
+}
+
 func (env *TypeEnv) getRef(ref Ref) types.Type {
 
 	node := env.tree.Child(ref[0].Value)
@@ -156,7 +155,7 @@ func (env *TypeEnv) getRef(ref Ref) types.Type {
 func (env *TypeEnv) getRefFallback(ref Ref) types.Type {
 
 	if env.next != nil {
-		return env.next.Get(ref)
+		return env.next.GetByRef(ref)
 	}
 
 	if RootDocumentNames.Contains(ref[0]) {
@@ -200,10 +199,7 @@ func (env *TypeEnv) getRefRecExtent(node *typeTreeNode) types.Type {
 
 	children := []*types.StaticProperty{}
 
-	node.Children().Iter(func(k, v util.T) bool {
-		key := k.(Value)
-		child := v.(*typeTreeNode)
-
+	node.children.Iter(func(key Value, child *typeTreeNode) bool {
 		tpe := env.getRefRecExtent(child)
 
 		// NOTE(sr): Converting to Golang-native types here is an extension of what we did
@@ -237,14 +233,14 @@ func (env *TypeEnv) wrap() *TypeEnv {
 type typeTreeNode struct {
 	key      Value
 	value    types.Type
-	children *util.HashMap
+	children *util.TypedHashMap[Value, *typeTreeNode]
 }
 
 func newTypeTree() *typeTreeNode {
 	return &typeTreeNode{
 		key:      nil,
 		value:    nil,
-		children: util.NewHashMap(valueEq, valueHash),
+		children: util.NewTypedHashMap[Value, *typeTreeNode](valueEq),
 	}
 }
 
@@ -253,10 +249,10 @@ func (n *typeTreeNode) Child(key Value) *typeTreeNode {
 	if !ok {
 		return nil
 	}
-	return value.(*typeTreeNode)
+	return value
 }
 
-func (n *typeTreeNode) Children() *util.HashMap {
+func (n *typeTreeNode) Children() *util.TypedHashMap[Value, *typeTreeNode] {
 	return n.children
 }
 
@@ -267,7 +263,7 @@ func (n *typeTreeNode) Get(path Ref) types.Type {
 		if !ok {
 			return nil
 		}
-		curr = child.(*typeTreeNode)
+		curr = child
 	}
 	return curr.Value()
 }
@@ -285,7 +281,7 @@ func (n *typeTreeNode) PutOne(key Value, tpe types.Type) {
 		child.key = key
 		n.children.Put(key, child)
 	} else {
-		child = c.(*typeTreeNode)
+		child = c
 	}
 
 	child.value = tpe
@@ -302,7 +298,7 @@ func (n *typeTreeNode) Put(path Ref, tpe types.Type) {
 			child.key = term.Value
 			curr.children.Put(child.key, child)
 		} else {
-			child = c.(*typeTreeNode)
+			child = c
 		}
 
 		curr = child
@@ -324,7 +320,7 @@ func (n *typeTreeNode) Insert(path Ref, tpe types.Type, env *TypeEnv) {
 			child.key = term.Value
 			curr.children.Put(child.key, child)
 		} else {
-			child = c.(*typeTreeNode)
+			child = c
 
 			if child.value != nil && i+1 < len(path) {
 				// If child has an object value, merge the new value into it.
@@ -426,13 +422,12 @@ func (n *typeTreeNode) String() string {
 		b.WriteString(v.String())
 	}
 
-	n.children.Iter(func(_, v util.T) bool {
-		if child, ok := v.(*typeTreeNode); ok {
-			b.WriteString("\n\t+ ")
-			s := child.String()
-			s = strings.ReplaceAll(s, "\n", "\n\t")
-			b.WriteString(s)
-		}
+	n.children.Iter(func(_ Value, child *typeTreeNode) bool {
+		b.WriteString("\n\t+ ")
+		s := child.String()
+		s = strings.ReplaceAll(s, "\n", "\n\t")
+		b.WriteString(s)
+
 		return false
 	})
 
@@ -472,10 +467,11 @@ func insertIntoObject(o *types.Object, path Ref, tpe types.Type, env *TypeEnv) (
 
 func (n *typeTreeNode) Leafs() map[*Ref]types.Type {
 	leafs := map[*Ref]types.Type{}
-	n.children.Iter(func(_, v util.T) bool {
-		collectLeafs(v.(*typeTreeNode), nil, leafs)
+	n.children.Iter(func(_ Value, v *typeTreeNode) bool {
+		collectLeafs(v, nil, leafs)
 		return false
 	})
+
 	return leafs
 }
 
@@ -485,8 +481,8 @@ func collectLeafs(n *typeTreeNode, path Ref, leafs map[*Ref]types.Type) {
 		leafs[&nPath] = n.Value()
 		return
 	}
-	n.children.Iter(func(_, v util.T) bool {
-		collectLeafs(v.(*typeTreeNode), nPath, leafs)
+	n.children.Iter(func(_ Value, v *typeTreeNode) bool {
+		collectLeafs(v, nPath, leafs)
 		return false
 	})
 }

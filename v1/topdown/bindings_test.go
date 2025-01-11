@@ -57,6 +57,8 @@ func TestBindingsArrayHashmap(t *testing.T) {
 }
 
 func testBindingKeys(t *testing.T, bindings *bindings, b *bindingsArrayHashmap, keys map[int]ast.Var) {
+	t.Helper()
+
 	for k := range keys {
 		value := testBindingValue(bindings, k)
 		if v, ok := b.Get(testBindingKey(k)); !ok {
@@ -99,4 +101,19 @@ func testBindingKey(key int) *ast.Term {
 
 func testBindingValue(b *bindings, key int) value {
 	return value{b, ast.IntNumberTerm(key)}
+}
+
+func BenchmarkCount(b *testing.B) {
+	bctx := BuiltinContext{}
+	operands := []*ast.Term{
+		ast.StringTerm("this is the string ÅÄÖ that will be counted"),
+	}
+	exp := eqIter(ast.IntNumberTerm(43))
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if err := builtinCount(bctx, operands, exp); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
