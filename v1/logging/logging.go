@@ -3,6 +3,7 @@ package logging
 import (
 	"context"
 	"io"
+	"maps"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
@@ -68,15 +69,11 @@ func (l *StandardLogger) SetFormatter(formatter logrus.Formatter) {
 }
 
 // WithFields provides additional fields to include in log output
-func (l *StandardLogger) WithFields(fields map[string]interface{}) Logger {
+func (l *StandardLogger) WithFields(fields map[string]any) Logger {
 	cp := *l
-	cp.fields = make(map[string]interface{})
-	for k, v := range l.fields {
-		cp.fields[k] = v
-	}
-	for k, v := range fields {
-		cp.fields[k] = v
-	}
+	cp.fields = make(map[string]any, len(l.fields)+len(fields))
+	maps.Copy(cp.fields, l.fields)
+	maps.Copy(cp.fields, fields)
 	return &cp
 }
 

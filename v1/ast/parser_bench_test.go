@@ -215,3 +215,82 @@ func generateObjectOrSetStatement(depth int) string {
 	}
 	return s.String()
 }
+
+// BenchmarkParseAnnotations/with_annotations-10         	   34660	     39087 ns/op	   32705 B/op	     327 allocs/op
+// BenchmarkParseAnnotations/without_annotations-10      	   63753	     18876 ns/op	   14195 B/op	     157 allocs/op
+
+// BenchmarkParseAnnotations/with_annotations-10         	   47551	     25211 ns/op	   29599 B/op	     296 allocs/op
+// BenchmarkParseAnnotations/without_annotations-10      	  119618	      9952 ns/op	   11336 B/op	     135 allocs/op
+
+func BenchmarkParseAnnotations(b *testing.B) {
+	policy := `# METADATA
+# title: pkg
+# description: a package
+package pkg
+
+# METADATA
+# title: rule
+# description: a rule
+# scope: document
+rule.foo.bar := true
+`
+	var module *Module
+
+	cases := []struct {
+		note               string
+		processAnnotations bool
+		expectAnnotations  int
+	}{
+		{"with annotations", true, 2},
+		{"without annotations", false, 0},
+	}
+
+	capabilities := CapabilitiesForThisVersion()
+
+	for _, tc := range cases {
+		b.Run(tc.note, func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				module = MustParseModuleWithOpts(policy, ParserOptions{
+					ProcessAnnotation: tc.processAnnotations,
+					Capabilities:      capabilities,
+				})
+			}
+
+			if len(module.Annotations) != tc.expectAnnotations {
+				b.Fatalf("Expected %d annotations but got %d", tc.expectAnnotations, len(module.Annotations))
+			}
+		})
+	}
+}
+
+// Without strings.Contains check for escape sequences
+// BenchmarkParseString-10    	 3838826	       314.3 ns/op	     368 B/op	       7 allocs/op
+//
+// With strings.Contains check for escape sequences
+// BenchmarkParseString-10    	12074408	        96.11 ns/op	     176 B/op	       3 allocs/op
+//
+// Remaining 3 allocations are:
+// 1. The Term pointer
+// 2. The string to Value interface conversion
+// 3. Loc() call creating a copy of the location
+//
+// Neither of these can easily be avoided, but the string to Value interface conversion could
+// be avoided if we interned known strings in Value form, or allowed the caller to pass a map
+// of known strings to the parser.
+func BenchmarkParseString(b *testing.B) {
+	p := Parser{
+		s: &state{
+			lit: `"hello world"`,
+		},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		t := p.parseString()
+		if t == nil {
+			b.Fatal("Expected string token")
+		}
+	}
+}

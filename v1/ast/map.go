@@ -10,18 +10,18 @@ import (
 	"github.com/open-policy-agent/opa/v1/util"
 )
 
-// ValueMap represents a key/value map between AST term values. Any type of term
-// can be used as a key in the map.
+// ValueMap represents a key/value map between AST term values. Any type of value can be used
+// as a key in the map. For new code, consider using util.TypedHashMap[Value, Value] instead.
 type ValueMap struct {
-	hashMap *util.HashMap
+	m *util.TypedHashMap[Value, Value]
 }
 
 // NewValueMap returns a new ValueMap.
+// Deprecated: Use util.TypedHashMap[Value, Value] instead.
 func NewValueMap() *ValueMap {
-	vs := &ValueMap{
-		hashMap: util.NewHashMap(valueEq, valueHash),
+	return &ValueMap{
+		m: util.NewTypedHashMap[Value, Value](valueEq),
 	}
-	return vs
 }
 
 // MarshalJSON provides a custom marshaller for the ValueMap which
@@ -45,19 +45,23 @@ func (vs *ValueMap) Copy() *ValueMap {
 		return nil
 	}
 	cpy := NewValueMap()
-	cpy.hashMap = vs.hashMap.Copy()
+	cpy.m = vs.m.Copy()
 	return cpy
 }
 
 // Equal returns true if this ValueMap equals the other.
 func (vs *ValueMap) Equal(other *ValueMap) bool {
-	if vs == nil {
-		return other == nil || other.Len() == 0
+	if vs.Len() != other.Len() {
+		return false
 	}
-	if other == nil {
-		return vs.Len() == 0
+
+	if vs.Len() == 0 && other.Len() == 0 {
+		return true
 	}
-	return vs.hashMap.Equal(other.hashMap)
+
+	return !vs.m.Iter(func(k, v Value) bool {
+		return !valueEq(v, other.Get(k))
+	})
 }
 
 // Len returns the number of elements in the map.
@@ -65,25 +69,23 @@ func (vs *ValueMap) Len() int {
 	if vs == nil {
 		return 0
 	}
-	return vs.hashMap.Len()
+	return vs.m.Len()
 }
 
 // Get returns the value in the map for k.
 func (vs *ValueMap) Get(k Value) Value {
 	if vs != nil {
-		if v, ok := vs.hashMap.Get(k); ok {
-			return v.(Value)
+		if v, ok := vs.m.Get(k); ok {
+			return v
 		}
 	}
 	return nil
 }
 
 // Hash returns a hash code for this ValueMap.
+// Deprecated: Use util.TypedHashMap[Value, Value] instead.
 func (vs *ValueMap) Hash() int {
-	if vs == nil {
-		return 0
-	}
-	return vs.hashMap.Hash()
+	return 0
 }
 
 // Iter calls the iter function for each key/value pair in the map. If the iter
@@ -92,11 +94,7 @@ func (vs *ValueMap) Iter(iter func(Value, Value) bool) bool {
 	if vs == nil {
 		return false
 	}
-	return vs.hashMap.Iter(func(kt, vt util.T) bool {
-		k := kt.(Value)
-		v := vt.(Value)
-		return iter(k, v)
-	})
+	return vs.m.Iter(iter)
 }
 
 // Put inserts a key k into the map with value v.
@@ -104,7 +102,7 @@ func (vs *ValueMap) Put(k, v Value) {
 	if vs == nil {
 		panic("put on nil value map")
 	}
-	vs.hashMap.Put(k, v)
+	vs.m.Put(k, v)
 }
 
 // Delete removes a key k from the map.
@@ -112,22 +110,21 @@ func (vs *ValueMap) Delete(k Value) {
 	if vs == nil {
 		return
 	}
-	vs.hashMap.Delete(k)
+	vs.m.Delete(k)
 }
 
 func (vs *ValueMap) String() string {
 	if vs == nil {
 		return "{}"
 	}
-	return vs.hashMap.String()
+	return vs.m.String()
 }
 
-func valueHash(v util.T) int {
-	return v.(Value).Hash()
-}
+func valueEq(a, b Value) bool {
+	switch a := a.(type) {
+	case interface{ Equal(Value) bool }:
+		return a.Equal(b)
+	}
 
-func valueEq(a, b util.T) bool {
-	av := a.(Value)
-	bv := b.(Value)
-	return av.Compare(bv) == 0
+	return Compare(a, b) == 0
 }

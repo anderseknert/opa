@@ -88,7 +88,7 @@ type HTTPRequestContext struct {
 func (b *BundleInfoV1) AST() ast.Value {
 	result := ast.NewObject()
 	if len(b.Revision) > 0 {
-		result.Insert(ast.StringTerm("revision"), ast.StringTerm(b.Revision))
+		result.Insert(revisionKey, ast.StringTerm(b.Revision))
 	}
 	return result
 }
@@ -126,7 +126,7 @@ func (e *EventV1) AST() (ast.Value, error) {
 		}
 		event.Insert(labelsKey, ast.NewTerm(labelsObj))
 	} else {
-		event.Insert(labelsKey, ast.NullTerm())
+		event.Insert(labelsKey, ast.InternedNullTerm)
 	}
 
 	event.Insert(decisionIDKey, ast.StringTerm(e.DecisionID))
@@ -640,7 +640,7 @@ func (p *Plugin) flushDecisions(ctx context.Context) {
 // Log appends a decision log event to the buffer for uploading.
 func (p *Plugin) Log(ctx context.Context, decision *server.Info) error {
 
-	bundles := map[string]BundleInfoV1{}
+	bundles := make(map[string]BundleInfoV1, len(decision.Bundles))
 	for name, info := range decision.Bundles {
 		bundles[name] = BundleInfoV1{Revision: info.Revision}
 	}

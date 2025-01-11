@@ -104,7 +104,7 @@ func (s *state) Text(offset, end int) []byte {
 	bs := s.s.Bytes()
 	if offset >= 0 && offset < len(bs) {
 		if end >= offset && end <= len(bs) {
-			return bs[offset:end]
+			return bs[offset:end:end]
 		}
 	}
 	return nil

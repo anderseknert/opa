@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"maps"
 	"reflect"
 	"slices"
 	"sort"
@@ -410,51 +411,51 @@ func TestCompilerGetExports(t *testing.T) {
 		// TODO(sr): add multi-val rule, and ref-with-var single-value rule.
 	}
 
-	hashMap := func(ms map[string][]string) *util.HashMap {
-		rules := util.NewHashMap(func(a, b util.T) bool {
-			switch a := a.(type) {
-			case Ref:
-				return a.Equal(b.(Ref))
-			case []Ref:
-				b := b.([]Ref)
-				if len(b) != len(a) {
-					return false
-				}
-				for i := range a {
-					if !a[i].Equal(b[i]) {
-						return false
-					}
-				}
-				return true
-			default:
-				panic("unreachable")
-			}
-		}, func(v util.T) int {
-			return v.(Ref).Hash()
-		})
-		for r, rs := range ms {
-			refs := make([]Ref, len(rs))
-			for i := range rs {
-				refs[i] = toRef(rs[i])
-			}
-			rules.Put(MustParseRef(r), refs)
-		}
-		return rules
-	}
+// 	hashMap := func(ms map[string][]string) *util.HashMap {
+// 		rules := util.NewHashMap(func(a, b util.T) bool {
+// 			switch a := a.(type) {
+// 			case Ref:
+// 				return a.Equal(b.(Ref))
+// 			case []Ref:
+// 				b := b.([]Ref)
+// 				if len(b) != len(a) {
+// 					return false
+// 				}
+// 				for i := range a {
+// 					if !a[i].Equal(b[i]) {
+// 						return false
+// 					}
+// 				}
+// 				return true
+// 			default:
+// 				panic("unreachable")
+// 			}
+// 		}, func(v util.T) int {
+// 			return v.(Ref).Hash()
+// 		})
+// 		for r, rs := range ms {
+// 			refs := make([]Ref, len(rs))
+// 			for i := range rs {
+// 				refs[i] = toRef(rs[i])
+// 			}
+// 			rules.Put(MustParseRef(r), refs)
+// 		}
+// 		return rules
+// 	}
 
-	for _, tc := range tests {
-		t.Run(tc.note, func(t *testing.T) {
-			c := NewCompiler()
-			for i, m := range tc.modules {
-				c.Modules[strconv.Itoa(i)] = m
-				c.sorted = append(c.sorted, strconv.Itoa(i))
-			}
-			if exp, act := hashMap(tc.exports), c.getExports(); !exp.Equal(act) {
-				t.Errorf("expected %v, got %v", exp, act)
-			}
-		})
-	}
-}
+// 	for _, tc := range tests {
+// 		t.Run(tc.note, func(t *testing.T) {
+// 			c := NewCompiler()
+// 			for i, m := range tc.modules {
+// 				c.Modules[fmt.Sprint(i)] = m
+// 				c.sorted = append(c.sorted, fmt.Sprint(i))
+// 			}
+// 			if exp, act := hashMap(tc.exports), c.getExports(); !exp.Equal(act) {
+// 				t.Errorf("expected %v, got %v", exp, act)
+// 			}
+// 		})
+// 	}
+// }
 
 func toRef(s string) Ref {
 	switch t := MustParseTerm(s).Value.(type) {

@@ -124,7 +124,7 @@ type Compiler struct {
 
 	localvargen                *localVarGenerator
 	moduleLoader               ModuleLoader
-	ruleIndices                *util.HashMap
+	ruleIndices                *util.TypedHashMap[Ref, RuleIndex]
 	stages                     []stage
 	maxErrs                    int
 	sorted                     []string // list of sorted module names
@@ -303,15 +303,10 @@ type stage struct {
 func NewCompiler() *Compiler {
 
 	c := &Compiler{
-		Modules:       map[string]*Module{},
-		RewrittenVars: map[Var]Var{},
-		Required:      &Capabilities{},
-		ruleIndices: util.NewHashMap(func(a, b util.T) bool {
-			r1, r2 := a.(Ref), b.(Ref)
-			return r1.Equal(r2)
-		}, func(x util.T) int {
-			return x.(Ref).Hash()
-		}),
+		Modules:               map[string]*Module{},
+		RewrittenVars:         map[Var]Var{},
+		Required:              &Capabilities{},
+		ruleIndices:           util.NewTypedHashMap[Ref, RuleIndex](refEqual),
 		maxErrs:               CompileErrorLimitDefault,
 		after:                 map[string][]CompilerStageDefinition{},
 		unsafeBuiltinsMap:     map[string]struct{}{},
@@ -825,7 +820,7 @@ func (c *Compiler) RuleIndex(path Ref) RuleIndex {
 	if !ok {
 		return nil
 	}
-	return r.(RuleIndex)
+	return r
 }
 
 // PassesTypeCheck determines whether the given body passes type checking
@@ -1275,7 +1270,7 @@ func arityMismatchError(env *TypeEnv, f Ref, expr *Expr, exp, act int) *Error {
 	if want, ok := env.Get(f).(*types.Function); ok { // generate richer error for built-in functions
 		have := make([]types.Type, len(expr.Operands()))
 		for i, op := range expr.Operands() {
-			have[i] = env.Get(op)
+			have[i] = env.Get(op.Value)
 		}
 		return newArgError(expr.Loc(), f, "arity mismatch", have, want.NamedFuncArgs())
 	}
@@ -1738,13 +1733,8 @@ func (c *Compiler) err(err *Error) {
 	c.Errors = append(c.Errors, err)
 }
 
-func (c *Compiler) getExports() *util.HashMap {
-
-	rules := util.NewHashMap(func(a, b util.T) bool {
-		return a.(Ref).Equal(b.(Ref))
-	}, func(v util.T) int {
-		return v.(Ref).Hash()
-	})
+func (c *Compiler) getExports() *util.TypedHashMap[Ref, []Ref] {
+	rules := util.NewTypedHashMap[Ref, []Ref](refEqual)
 
 	for _, name := range c.sorted {
 		mod := c.Modules[name]
@@ -1757,18 +1747,18 @@ func (c *Compiler) getExports() *util.HashMap {
 	return rules
 }
 
-func hashMapAdd(rules *util.HashMap, pkg, rule Ref) {
+func hashMapAdd(rules *util.TypedHashMap[Ref, []Ref], pkg, rule Ref) {
 	prev, ok := rules.Get(pkg)
 	if !ok {
 		rules.Put(pkg, []Ref{rule})
 		return
 	}
-	for _, p := range prev.([]Ref) {
+	for _, p := range prev {
 		if p.Equal(rule) {
 			return
 		}
 	}
-	rules.Put(pkg, append(prev.([]Ref), rule))
+	rules.Put(pkg, append(prev, rule))
 }
 
 func (c *Compiler) GetAnnotationSet() *AnnotationSet {
@@ -1867,7 +1857,7 @@ func (c *Compiler) resolveAllRefs() {
 
 		var ruleExports []Ref
 		if x, ok := rules.Get(mod.Package.Path); ok {
-			ruleExports = x.([]Ref)
+			ruleExports = x
 		}
 
 		globals := getGlobals(mod.Package, ruleExports, mod.Imports)
@@ -2062,7 +2052,7 @@ func checkVoidCalls(env *TypeEnv, x interface{}) Errors {
 	var errs Errors
 	WalkTerms(x, func(x *Term) bool {
 		if call, ok := x.Value.(Call); ok {
-			if tpe, ok := env.Get(call[0]).(*types.Function); ok && tpe.Result() == nil {
+			if tpe, ok := env.Get(call[0].Value).(*types.Function); ok && tpe.Result() == nil {
 				errs = append(errs, NewError(TypeErr, x.Loc(), "%v used as value", call))
 			}
 		}
@@ -3014,7 +3004,7 @@ func (qc *queryCompiler) resolveRefs(qctx *QueryContext, body Body) (Body, error
 			var ruleExports []Ref
 			rules := qc.compiler.getExports()
 			if exist, ok := rules.Get(pkg.Path); ok {
-				ruleExports = exist.([]Ref)
+				ruleExports = exist
 			}
 
 			globals = getGlobals(qctx.Package, ruleExports, qctx.Imports)

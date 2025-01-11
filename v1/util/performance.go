@@ -27,6 +27,30 @@ func GrowPtrSlice[T any](s []*T, n int) []*T {
 	return s
 }
 
+// NumDigitsInt returns the number of digits in n.
+// This is useful for pre-allocating buffers for string conversion.
+func NumDigitsInt(n int) int {
+	if n == 0 {
+		return 1
+	}
+
+	if n < 0 {
+		n = -n
+	}
+
+	return int(math.Log10(float64(n))) + 1
+}
+
+// NumDigitsUint returns the number of digits in n.
+// This is useful for pre-allocating buffers for string conversion.
+func NumDigitsUint(n uint64) int {
+	if n == 0 {
+		return 1
+	}
+
+	return int(math.Log10(float64(n))) + 1
+}
+
 // Allocation free conversion from []byte to string (unsafe)
 // Note that the byte slice must not be modified after conversion
 func ByteSliceToString(bs []byte) string {

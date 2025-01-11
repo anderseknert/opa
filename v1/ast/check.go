@@ -6,7 +6,7 @@ package ast
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/open-policy-agent/opa/v1/types"
@@ -288,13 +288,13 @@ func (tc *typeChecker) checkRule(env *TypeEnv, as *AnnotationSet, rule *Rule) {
 			args[i] = cpy.Get(rule.Head.Args[i])
 		}
 
-		f := types.NewFunction(args, cpy.Get(rule.Head.Value))
+		f := types.NewFunction(args, cpy.Get(rule.Head.Value.Value))
 
 		tpe = f
 	} else {
 		switch rule.Head.RuleKind() {
 		case SingleValue:
-			typeV := cpy.Get(rule.Head.Value)
+			typeV := cpy.Get(rule.Head.Value.Value)
 			if !path.IsGround() {
 				// e.g. store object[string: whatever] at data.p.q.r, not data.p.q.r[x] or data.p.q.r[x].y[z]
 				objPath := path.DynamicSuffix()
@@ -312,7 +312,7 @@ func (tc *typeChecker) checkRule(env *TypeEnv, as *AnnotationSet, rule *Rule) {
 				}
 			}
 		case MultiValue:
-			typeK := cpy.Get(rule.Head.Key)
+			typeK := cpy.Get(rule.Head.Key.Value)
 			if typeK != nil {
 				tpe = types.NewSet(typeK)
 			}
@@ -341,7 +341,7 @@ func nestedObject(env *TypeEnv, path Ref, tpe types.Type) (types.Type, error) {
 	}
 
 	var dynamicProperty *types.DynamicProperty
-	typeK := env.Get(k)
+	typeK := env.Get(k.Value)
 	if typeK == nil {
 		return nil, nil
 	}
@@ -391,7 +391,7 @@ func (tc *typeChecker) checkExprBuiltin(env *TypeEnv, expr *Expr) *Error {
 	// type checker relies on reordering (in particular for references to local
 	// vars).
 	name := expr.Operator()
-	tpe := env.Get(name)
+	tpe := env.GetByRef(name)
 
 	if tpe == nil {
 		if tc.allowUndefinedFuncs {
@@ -431,7 +431,7 @@ func (tc *typeChecker) checkExprBuiltin(env *TypeEnv, expr *Expr) *Error {
 		if !unify1(env, args[i], fargs.Arg(i), false) {
 			post := make([]types.Type, len(args))
 			for i := range args {
-				post[i] = env.Get(args[i])
+				post[i] = env.Get(args[i].Value)
 			}
 			return newArgError(expr.Location, name, "invalid argument(s)", post, namedFargs)
 		}
@@ -453,7 +453,7 @@ func checkExprEq(env *TypeEnv, expr *Expr) *Error {
 	}
 
 	a, b := expr.Operand(0), expr.Operand(1)
-	typeA, typeB := env.Get(a), env.Get(b)
+	typeA, typeB := env.Get(a.Value), env.Get(b.Value)
 
 	if !unify2(env, a, typeA, b, typeB) {
 		err := NewError(TypeErr, expr.Location, "match error")
@@ -473,7 +473,7 @@ func (tc *typeChecker) checkExprWith(env *TypeEnv, expr *Expr, i int) *Error {
 	}
 
 	target, value := expr.With[i].Target, expr.With[i].Value
-	targetType, valueType := env.Get(target), env.Get(value)
+	targetType, valueType := env.Get(target.Value), env.Get(value.Value)
 
 	if t, ok := targetType.(*types.Function); ok { // built-in function replacement
 		switch v := valueType.(type) {
@@ -509,7 +509,7 @@ func unify2(env *TypeEnv, a *Term, typeA types.Type, b *Term, typeB types.Type) 
 	case Var:
 		switch b.Value.(type) {
 		case Var:
-			return unify1(env, a, types.A, false) && unify1(env, b, env.Get(a), false)
+			return unify1(env, a, types.A, false) && unify1(env, b, env.Get(a.Value), false)
 		case *Array:
 			return unify2Array(env, b, a)
 		case *object:
@@ -533,7 +533,7 @@ func unify2Array(env *TypeEnv, a *Term, b *Term) bool {
 			return true
 		}
 	case Var:
-		return unify1(env, a, types.A, false) && unify1(env, b, env.Get(a), false)
+		return unify1(env, a, types.A, false) && unify1(env, b, env.Get(a.Value), false)
 	}
 	return false
 }
@@ -545,14 +545,14 @@ func unify2Object(env *TypeEnv, a *Term, b *Term) bool {
 		cv := obj.Intersect(bv)
 		if obj.Len() == bv.Len() && bv.Len() == len(cv) {
 			for i := range cv {
-				if !unify2(env, cv[i][1], env.Get(cv[i][1]), cv[i][2], env.Get(cv[i][2])) {
+				if !unify2(env, cv[i][1], env.Get(cv[i][1].Value), cv[i][2], env.Get(cv[i][2].Value)) {
 					return false
 				}
 			}
 			return true
 		}
 	case Var:
-		return unify1(env, a, types.A, false) && unify1(env, b, env.Get(a), false)
+		return unify1(env, a, types.A, false) && unify1(env, b, env.Get(a.Value), false)
 	}
 	return false
 }
@@ -630,7 +630,7 @@ func unify1(env *TypeEnv, term *Term, tpe types.Type, union bool) bool {
 		if !IsConstant(v) {
 			panic("unreachable")
 		}
-		return unifies(env.Get(term), tpe)
+		return unifies(env.Get(term.Value), tpe)
 	}
 }
 
@@ -732,7 +732,7 @@ func (rc *refChecker) Visit(x interface{}) bool {
 }
 
 func (rc *refChecker) checkApply(curr *TypeEnv, ref Ref) *Error {
-	switch tpe := curr.Get(ref).(type) {
+	switch tpe := curr.GetByRef(ref).(type) {
 	case *types.Function: // NOTE(sr): We don't support first-class functions, except for `with`.
 		return newRefErrUnsupported(ref[0].Location, rc.varRewriter(ref), len(ref)-1, tpe)
 	}
@@ -781,8 +781,8 @@ func (rc *refChecker) checkRef(curr *TypeEnv, node *typeTreeNode, ref Ref, idx i
 
 		case RootDocumentNames.Contains(ref[0]):
 			if idx != 0 {
-				node.Children().Iter(func(_, child util.T) bool {
-					_ = rc.checkRef(curr, child.(*typeTreeNode), ref, idx+1) // ignore error
+				node.Children().Iter(func(_ Value, child *typeTreeNode) bool {
+					_ = rc.checkRef(curr, child, ref, idx+1) // ignore error
 					return false
 				})
 				return nil
@@ -834,7 +834,7 @@ func (rc *refChecker) checkRefLeaf(tpe types.Type, ref Ref, idx int) *Error {
 
 	case *Array, Object, Set:
 		if !unify1(rc.env, head, keys, false) {
-			return newRefErrInvalid(ref[0].Location, rc.varRewriter(ref), idx, rc.env.Get(head), keys, nil)
+			return newRefErrInvalid(ref[0].Location, rc.varRewriter(ref), idx, rc.env.Get(head.Value), keys, nil)
 		}
 
 	default:
@@ -1126,13 +1126,16 @@ func newArgError(loc *Location, builtinName Ref, msg string, have []types.Type, 
 	return err
 }
 
-func getOneOfForNode(node *typeTreeNode) (result []Value) {
-	node.Children().Iter(func(k, _ util.T) bool {
-		result = append(result, k.(Value))
+func getOneOfForNode(node *typeTreeNode) []Value {
+	result := make([]Value, 0, node.children.Len())
+
+	node.children.Iter(func(k Value, _ *typeTreeNode) bool {
+		result = append(result, k)
 		return false
 	})
 
-	sortValueSlice(result)
+	slices.SortFunc(result, Value.Compare)
+
 	return result
 }
 
@@ -1155,14 +1158,10 @@ func getOneOfForType(tpe types.Type) (result []Value) {
 	}
 
 	result = removeDuplicate(result)
-	sortValueSlice(result)
-	return result
-}
 
-func sortValueSlice(sl []Value) {
-	sort.Slice(sl, func(i, j int) bool {
-		return sl[i].Compare(sl[j]) < 0
-	})
+	slices.SortFunc(result, Value.Compare)
+
+	return result
 }
 
 func removeDuplicate(list []Value) []Value {
@@ -1180,7 +1179,7 @@ func removeDuplicate(list []Value) []Value {
 func getArgTypes(env *TypeEnv, args []*Term) []types.Type {
 	pre := make([]types.Type, len(args))
 	for i := range args {
-		pre[i] = env.Get(args[i])
+		pre[i] = env.Get(args[i].Value)
 	}
 	return pre
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
+	"slices"
 	"sort"
 	"time"
 
@@ -62,6 +63,7 @@ type Query struct {
 	printHook                   print.Hook
 	tracingOpts                 tracing.Options
 	virtualCache                VirtualCache
+	baseCache                   BaseCache
 	baseCache                   BaseCache
 }
 
@@ -461,9 +463,7 @@ func (q *Query) PartialRun(ctx context.Context) (partials []ast.Body, support []
 		}) // cannot return error
 
 		// Sort binding expressions so that results are deterministic.
-		sort.Slice(bindingExprs, func(i, j int) bool {
-			return bindingExprs[i].Compare(bindingExprs[j]) < 0
-		})
+		slices.SortFunc(bindingExprs, (*ast.Expr).Compare)
 
 		for i := range bindingExprs {
 			body.Append(bindingExprs[i])

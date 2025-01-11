@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"maps"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -313,13 +314,9 @@ type oauth2Token struct {
 
 func (ap *oauth2ClientCredentialsAuthPlugin) createAuthJWT(ctx context.Context, extClaims map[string]interface{}, signingKey interface{}) (*string, error) {
 	now := time.Now()
-	claims := map[string]interface{}{
-		"iat": now.Unix(),
-		"exp": now.Add(10 * time.Minute).Unix(),
-	}
-	for k, v := range extClaims {
-		claims[k] = v
-	}
+	claims := maps.Clone(extClaims)
+	claims["iat"] = now.Unix()
+	claims["exp"] = now.Add(10 * time.Minute).Unix()
 
 	if len(ap.Scopes) > 0 {
 		claims["scope"] = strings.Join(ap.Scopes, " ")

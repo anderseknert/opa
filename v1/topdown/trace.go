@@ -15,6 +15,7 @@ import (
 
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/topdown/builtins"
+	"github.com/open-policy-agent/opa/v1/util"
 )
 
 const (
@@ -91,7 +92,7 @@ type Event struct {
 
 	input                     *ast.Term
 	bindings                  *bindings
-	localVirtualCacheSnapshot *ast.ValueMap
+	localVirtualCacheSnapshot *util.TypedHashMap[ast.Value, ast.Value]
 }
 
 func (evt *Event) WithInput(input *ast.Term) *Event {

@@ -304,6 +304,17 @@ type Term struct {
 
 // NewTerm returns a new Term object.
 func NewTerm(v Value) *Term {
+	// if t, ok := v.(*Array); ok {
+	// 	if t.Len() == 1 {
+	// 		if t, ok := t.Elem(0).Value.(String); ok {
+	// 			if t == String("endswith") {
+	// 				fmt.Println("NewTerm", v)
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	//fmt.Println("NewTerm", v)
 	return &Term{
 		Value: v,
 	}
@@ -584,6 +595,15 @@ func (null Null) String() string {
 // Boolean represents a boolean value defined by JSON.
 type Boolean bool
 
+// These are effectively constants, but casting to Value allocates,
+// so if that's an issue, these can be referenced whenever you need to
+// pass or return a Boolean as Value. Obviously, things will break in
+// all kinds of ways if you modify these.
+var (
+	BooleanTrueValue  Value = Boolean(true)
+	BooleanFalseValue Value = Boolean(false)
+)
+
 // BooleanTerm creates a new Term with a Boolean value.
 func BooleanTerm(b bool) *Term {
 	if b {
@@ -786,6 +806,20 @@ type String string
 
 // StringTerm creates a new Term with a String value.
 func StringTerm(s string) *Term {
+	// if s == "" {
+	// 	return &Term{Value: String("")}
+	// }
+
+	// if s == "member_3" {
+	// 	return &Term{Value: String(s)}
+	// }
+
+	// if s == "0" {
+	// 	return &Term{Value: String(s)}
+	// }
+
+	// fmt.Println("StringTerm", s)
+
 	return &Term{Value: String(s)}
 }
 

@@ -11,7 +11,6 @@
 package ast
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"strings"
@@ -357,7 +356,7 @@ func ParsePartialSetDocRuleFromTerm(module *Module, term *Term) (*Rule, error) {
 		return nil, fmt.Errorf("invalid rule head: %v", ref)
 	}
 
-	head := RefHead(ref)
+	var head *Head
 	if len(ref) == 2 {
 		v, ok := ref[0].Value.(Var)
 		if !ok {
@@ -366,6 +365,8 @@ func ParsePartialSetDocRuleFromTerm(module *Module, term *Term) (*Rule, error) {
 		// Modify the code to add the location to the head ref
 		head = VarHead(v, ref[0].Location, nil)
 		head.Key = ref[1]
+	} else {
+		head = RefHead(ref)
 	}
 	head.Location = term.Location
 
@@ -448,7 +449,7 @@ func ParseImports(input string) ([]*Import, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := []*Import{}
+	result := make([]*Import, 0, len(stmts))
 	for _, stmt := range stmts {
 		if imp, ok := stmt.(*Import); ok {
 			result = append(result, imp)
@@ -492,7 +493,14 @@ func ParseBodyWithOpts(input string, popts ParserOptions) (Body, error) {
 		return nil, err
 	}
 
-	result := Body{}
+	l := 0
+	for i := range stmts {
+		if body, ok := stmts[i].(Body); ok {
+			l += len(body)
+		}
+	}
+
+	result := make(Body, 0, l)
 
 	for _, stmt := range stmts {
 		switch stmt := stmt.(type) {
@@ -539,8 +547,8 @@ func ParsePackage(input string) (*Package, error) {
 
 // ParseTerm returns exactly one term.
 // If multiple terms are parsed, an error is returned.
-func ParseTerm(input string) (*Term, error) {
-	body, err := ParseBody(input)
+func ParseTermWithOpts(input string, popts ParserOptions) (*Term, error) {
+	body, err := ParseBodyWithOpts(input, popts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse term: %w", err)
 	}
@@ -554,9 +562,20 @@ func ParseTerm(input string) (*Term, error) {
 	return term, nil
 }
 
+// ParseTerm returns exactly one term.
+// If multiple terms are parsed, an error is returned.
+func ParseTerm(input string) (*Term, error) {
+	return ParseTermWithOpts(input, ParserOptions{})
+}
+
 // ParseRef returns exactly one reference.
 func ParseRef(input string) (Ref, error) {
-	term, err := ParseTerm(input)
+	return ParseRefWithOpts(input, ParserOptions{})
+}
+
+// ParseRefWithOpts returns exactly one reference.
+func ParseRefWithOpts(input string, popts ParserOptions) (Ref, error) {
+	term, err := ParseTermWithOpts(input, popts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse ref: %w", err)
 	}
@@ -627,7 +646,7 @@ func ParseStatementsWithOpts(filename, input string, popts ParserOptions) ([]Sta
 
 	parser := NewParser().
 		WithFilename(filename).
-		WithReader(bytes.NewBufferString(input)).
+		WithReader(strings.NewReader(input)).
 		WithProcessAnnotation(popts.ProcessAnnotation).
 		WithFutureKeywords(popts.FutureKeywords...).
 		WithAllFutureKeywords(popts.AllFutureKeywords).
@@ -677,7 +696,7 @@ func parseModule(filename string, stmts []Statement, comments []*Comment, regoCo
 		switch stmt := stmt.(type) {
 		case *Import:
 			mod.Imports = append(mod.Imports, stmt)
-			if mod.regoVersion == RegoV0 && Compare(stmt.Path.Value, RegoV1CompatibleRef) == 0 {
+			if mod.regoVersion == RegoV0 && RegoV1CompatibleRef.Compare(stmt.Path.Value) == 0 {
 				mod.regoVersion = RegoV0CompatV1
 			}
 		case *Rule:

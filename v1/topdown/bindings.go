@@ -30,14 +30,18 @@ func (u *undo) Undo() {
 }
 
 type bindings struct {
-	id     uint64
 	values bindingsArrayHashmap
 	instr  *Instrumentation
+	id     uint64
 }
 
 func newBindings(id uint64, instr *Instrumentation) *bindings {
 	values := newBindingsArrayHashmap()
-	return &bindings{id, values, instr}
+	return &bindings{
+		id:     id,
+		values: values,
+		instr:  instr,
+	}
 }
 
 func (u *bindings) Iter(caller *bindings, iter func(*ast.Term, *ast.Term) error) error {
@@ -295,9 +299,9 @@ const maxLinearScan = 16
 // of a hash map for smaller # of entries. Hash maps start to
 // show off their performance advantage only after 16 keys.
 type bindingsArrayHashmap struct {
-	n int // Entries in the array.
 	a *[maxLinearScan]bindingArrayKeyValue
 	m map[ast.Var]bindingArrayKeyValue
+	n int // Entries in the array.
 }
 
 type bindingArrayKeyValue struct {
@@ -309,8 +313,19 @@ func newBindingsArrayHashmap() bindingsArrayHashmap {
 	return bindingsArrayHashmap{}
 }
 
+func (b *bindingsArrayHashmap) clear() {
+	b.n = 0
+	clear(b.m)
+
+	if b.a != nil {
+		for i := range *b.a {
+			(*b.a)[i] = bindingArrayKeyValue{}
+		}
+	}
+}
+
 func (b *bindingsArrayHashmap) Put(key *ast.Term, value value) {
-	if b.m == nil {
+	if b.n < maxLinearScan {
 		if b.a == nil {
 			b.a = new([maxLinearScan]bindingArrayKeyValue)
 		} else if i := b.find(key); i >= 0 {
@@ -318,29 +333,29 @@ func (b *bindingsArrayHashmap) Put(key *ast.Term, value value) {
 			return
 		}
 
-		if b.n < maxLinearScan {
-			(*b.a)[b.n] = bindingArrayKeyValue{key, value}
-			b.n++
-			return
-		}
-
-		// Array is full, revert to using the hash map instead.
-
-		b.m = make(map[ast.Var]bindingArrayKeyValue, maxLinearScan+1)
-		for _, kv := range *b.a {
-			b.m[kv.key.Value.(ast.Var)] = bindingArrayKeyValue{kv.key, kv.value}
-		}
-		b.m[key.Value.(ast.Var)] = bindingArrayKeyValue{key, value}
-
-		b.n = 0
+		(*b.a)[b.n] = bindingArrayKeyValue{key, value}
+		b.n++
 		return
 	}
 
+	if b.n == maxLinearScan {
+		// Array is full, revert to using the hash map instead.
+		if b.m == nil {
+			b.m = make(map[ast.Var]bindingArrayKeyValue, maxLinearScan+1)
+		}
+
+		for i := range *b.a {
+			b.m[(*b.a)[i].key.Value.(ast.Var)] = (*b.a)[i]
+			(*b.a)[i] = bindingArrayKeyValue{}
+		}
+	}
+
 	b.m[key.Value.(ast.Var)] = bindingArrayKeyValue{key, value}
+	b.n++
 }
 
 func (b *bindingsArrayHashmap) Get(key *ast.Term) (value, bool) {
-	if b.m == nil {
+	if b.n <= maxLinearScan {
 		if i := b.find(key); i >= 0 {
 			return (*b.a)[i].value, true
 		}
@@ -357,7 +372,7 @@ func (b *bindingsArrayHashmap) Get(key *ast.Term) (value, bool) {
 }
 
 func (b *bindingsArrayHashmap) Delete(key *ast.Term) {
-	if b.m == nil {
+	if b.n <= maxLinearScan {
 		if i := b.find(key); i >= 0 {
 			n := b.n - 1
 			if i < n {
