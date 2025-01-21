@@ -140,10 +140,10 @@ The 'build' command supports targets (specified by -t):
             This is for further processing, OPA cannot evaluate a "plan bundle" like it
             can evaluate a wasm or rego bundle.
 
-The -e flag tells the 'build' command which documents (entrypoints) will be queried by 
-the software asking for policy decisions, so that it can focus optimization efforts and 
+The -e flag tells the 'build' command which documents (entrypoints) will be queried by
+the software asking for policy decisions, so that it can focus optimization efforts and
 ensure that document is not eliminated by the optimizer.
-Note: Unless the --prune-unused flag is used, any rule transitively referring to a 
+Note: Unless the --prune-unused flag is used, any rule transitively referring to a
 package or rule declared as an entrypoint will also be enumerated as an entrypoint.
 
 Signing

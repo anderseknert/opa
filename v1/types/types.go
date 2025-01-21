@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -340,9 +341,8 @@ type Object struct {
 
 // NewObject returns a new Object type.
 func NewObject(static []*StaticProperty, dynamic *DynamicProperty) *Object {
-	sort.Slice(static, func(i, j int) bool {
-		cmp := util.Compare(static[i].Key, static[j].Key)
-		return cmp == -1
+	slices.SortFunc(static, func(a, b *StaticProperty) int {
+		return util.Compare(a.Key, b.Key)
 	})
 	return &Object{
 		static:  static,

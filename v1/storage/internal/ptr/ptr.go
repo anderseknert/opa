@@ -7,6 +7,7 @@ package ptr
 
 import (
 	"strconv"
+	"sync"
 
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/storage"
@@ -35,6 +36,15 @@ func Ptr(data interface{}, path storage.Path) (interface{}, error) {
 	}
 
 	return node, nil
+}
+
+// This is a little silly, but warranted as we create lots of temporary
+// terms to use for key lookups below. The term is immediately discarded
+// after the lookup is done, so we benefit from recycling these.
+var tempTermPool = &sync.Pool{
+	New: func() any {
+		return &ast.Term{}
+	},
 }
 
 func ValuePtr(data ast.Value, path storage.Path) (ast.Value, error) {
