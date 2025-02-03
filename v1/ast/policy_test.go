@@ -1137,3 +1137,24 @@ func assertRuleString(t *testing.T, rule *Rule, expected string, opts toStringOp
 		t.Errorf("Expected %v but got %v for rego-version %v", expected, result, opts.regoVersion)
 	}
 }
+
+// 3948782	       304.5 ns/op	     256 B/op	       5 allocs/op
+// 6106100	       192.7 ns/op	     208 B/op	       3 allocs/op // walk values directly
+func BenchmarkHeadVars(b *testing.B) {
+	head := &Head{
+		Args: Args{
+			VarTerm("a"),
+			VarTerm("b"),
+			VarTerm("c"),
+		},
+		Reference: MustParseRef("data.foo[x].bar"),
+	}
+	b.ResetTimer()
+	for range b.N {
+		vars := head.Vars()
+		if len(vars) != 4 {
+			b.Fatalf("Expected 4 vars but got %d", len(vars))
+		}
+	}
+
+}

@@ -33,7 +33,6 @@ func isCallSafe(call Call, safe VarSet) bool {
 func Unify(safe VarSet, a *Term, b *Term) VarSet {
 	u := &unifier{
 		safe:    safe,
-		unified: VarSet{},
 		unknown: map[Var]VarSet{},
 	}
 	u.unify(a, b)
@@ -181,7 +180,11 @@ func (u *unifier) markAllSafe(x Value) {
 }
 
 func (u *unifier) markSafe(x Var) {
-	u.unified.Add(x)
+	if u.unified == nil {
+		u.unified = NewVarSet(x)
+	} else {
+		u.unified.Add(x)
+	}
 
 	// Add dependencies of 'x' to safe set
 	vs := u.unknown[x]

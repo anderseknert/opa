@@ -49,6 +49,7 @@ func (l *localVarGenerator) Generate() ast.Var {
 // New returns a new CopyPropagator that optimizes queries while preserving vars
 // in the livevars set.
 func New(livevars ast.VarSet) *CopyPropagator {
+	livevars = livevars.OrEmpty()
 
 	sorted := make([]ast.Var, 0, len(livevars))
 	for v := range livevars {

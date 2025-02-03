@@ -450,11 +450,12 @@ func (term *Term) UnmarshalJSON(bs []byte) error {
 	return nil
 }
 
-// Vars returns a VarSet with variables contained in this term.
+// Vars returns a VarSet with variables contained in this term,
+// or nil if the term contains no vars.
 func (term *Term) Vars() VarSet {
-	vis := &VarVisitor{vars: VarSet{}}
+	vis := NewVarVisitor()
 	vis.Walk(term)
-	return vis.vars
+	return vis.Vars()
 }
 
 // IsConstant returns true if the AST value is constant.

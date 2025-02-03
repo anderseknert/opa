@@ -92,7 +92,7 @@ func TestUnify(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/%s/%s", tc.note, tc.safe, tc.expected), func(t *testing.T) {
 
 			expr := MustParseBody(tc.expr)[0]
-			safe := VarSet{}
+			safe := NewVarSet()
 			MustParseTerm(tc.safe).Value.(*Array).Foreach(func(x *Term) {
 				safe.Add(x.Value.(Var))
 			})
@@ -104,12 +104,12 @@ func TestUnify(t *testing.T) {
 
 			a, b := terms[1], terms[2]
 			unified := Unify(safe, a, b)
-			result := VarSet{}
+			result := NewVarSet()
 			for k := range unified {
 				result.Add(k)
 			}
 
-			expected := VarSet{}
+			expected := NewVarSet()
 			MustParseTerm(tc.expected).Value.(*Array).Foreach(func(x *Term) {
 				expected.Add(x.Value.(Var))
 			})

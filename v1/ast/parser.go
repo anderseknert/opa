@@ -718,6 +718,8 @@ func (p *Parser) parseRules() []*Rule {
 		}
 
 		rule.Body = NewBody(NewExpr(BooleanTerm(true).SetLocation(rule.Location)).SetLocation(rule.Location))
+		rule.generatedBody = true
+
 		return []*Rule{&rule}
 	}
 

@@ -962,7 +962,7 @@ func (c *Compiler) buildRuleIndices() {
 func (c *Compiler) buildComprehensionIndices() {
 	for _, name := range c.sorted {
 		WalkRules(c.Modules[name], func(r *Rule) bool {
-			candidates := r.Head.Args.Vars()
+			candidates := r.Head.Args.Vars().OrEmpty()
 			candidates.Update(ReservedVars)
 			n := buildComprehensionIndices(c.debug, c.GetArity, candidates, c.RewrittenVars, r.Body, c.comprehensionIndices)
 			c.counterAdd(compileStageComprehensionIndexBuild, n)
@@ -1326,7 +1326,7 @@ func (c *Compiler) checkSafetyRuleHeads() {
 	for _, name := range c.sorted {
 		m := c.Modules[name]
 		WalkRules(m, func(r *Rule) bool {
-			safe := r.Body.Vars(SafetyCheckVisitorParams)
+			safe := r.Body.Vars(SafetyCheckVisitorParams).OrEmpty()
 			safe.Update(r.Head.Args.Vars())
 			unsafe := r.Head.Vars().Diff(safe)
 			for v := range unsafe {
@@ -2032,7 +2032,7 @@ func (c *Compiler) rewritePrintCalls() {
 		for _, name := range c.sorted {
 			mod := c.Modules[name]
 			WalkRules(mod, func(r *Rule) bool {
-				safe := r.Head.Args.Vars()
+				safe := r.Head.Args.Vars().OrEmpty()
 				safe.Update(ReservedVars)
 				vis := func(b Body) bool {
 					modrec, errs := rewritePrintCalls(c.localvargen, c.GetArity, safe, b)
@@ -3320,7 +3320,6 @@ var comprehensionIndexBlacklist = map[string]int{
 func newComprehensionIndexRegressionCheckVisitor(candidates VarSet) *comprehensionIndexRegressionCheckVisitor {
 	return &comprehensionIndexRegressionCheckVisitor{
 		candidates: candidates,
-		seen:       NewVarSet(),
 	}
 }
 
@@ -3339,7 +3338,7 @@ func (vis *comprehensionIndexRegressionCheckVisitor) visit(x interface{}) bool {
 		case Ref:
 			vis.assertEmptyIntersection(x.OutputVars())
 		case Var:
-			vis.seen.Add(x)
+			vis.Add(x)
 		// Always skip comprehensions. We do not have to visit their bodies here.
 		case *ArrayComprehension, *SetComprehension, *ObjectComprehension:
 			return true
@@ -3354,6 +3353,14 @@ func (vis *comprehensionIndexRegressionCheckVisitor) assertEmptyIntersection(vs 
 			vis.worse = true
 			return
 		}
+	}
+}
+
+func (vis *comprehensionIndexRegressionCheckVisitor) Add(v Var) {
+	if vis.seen == nil {
+		vis.seen = NewVarSet(v)
+	} else {
+		vis.seen.Add(v)
 	}
 }
 
@@ -3860,7 +3867,7 @@ func (vs unsafeVars) Set(e *Expr, s VarSet) {
 func (vs unsafeVars) Update(o unsafeVars) {
 	for k, v := range o {
 		if _, ok := vs[k]; !ok {
-			vs[k] = VarSet{}
+			vs[k] = NewVarSet()
 		}
 		vs[k].Update(v)
 	}
@@ -3917,7 +3924,7 @@ func reorderBodyForSafety(builtins map[string]*Builtin, arity func(Ref) int, glo
 
 	bodyVars := body.Vars(SafetyCheckVisitorParams)
 	reordered := make(Body, 0, len(body))
-	safe := VarSet{}
+	safe := NewVarSet()
 	unsafe := unsafeVars{}
 
 	for _, e := range body {
@@ -3942,8 +3949,7 @@ func reorderBodyForSafety(builtins map[string]*Builtin, arity func(Ref) int, glo
 
 			// check closures: is this expression closing over variables that
 			// haven't been made safe by what's already included in `reordered`?
-			vs := unsafeVarsInClosures(e)
-			cv := vs.Intersect(bodyVars).Diff(globals)
+			cv := unsafeVarsInClosures(e).Intersect(bodyVars).Diff(globals)
 			uv := cv.Diff(outputVarsForBody(reordered, arity, safe))
 
 			if len(uv) > 0 {
@@ -4035,7 +4041,7 @@ func (xform *bodySafetyTransformer) Visit(x interface{}) bool {
 	case *Expr:
 		if ev, ok := term.Terms.(*Every); ok {
 			xform.globals.Update(ev.KeyValueVars())
-			ev.Body = xform.reorderComprehensionSafety(NewVarSet(), ev.Body)
+			ev.Body = xform.reorderComprehensionSafety(nil, ev.Body)
 			return true
 		}
 	}
@@ -4043,10 +4049,9 @@ func (xform *bodySafetyTransformer) Visit(x interface{}) bool {
 }
 
 func (xform *bodySafetyTransformer) reorderComprehensionSafety(tv VarSet, body Body) Body {
-	bv := body.Vars(SafetyCheckVisitorParams)
+	bv := body.Vars(SafetyCheckVisitorParams).OrEmpty()
 	bv.Update(xform.globals)
-	uv := tv.Diff(bv)
-	for v := range uv {
+	for v := range tv.Diff(bv) {
 		xform.unsafe.Add(xform.current, v)
 	}
 
@@ -4064,7 +4069,7 @@ func (xform *bodySafetyTransformer) reorderArrayComprehensionSafety(ac *ArrayCom
 }
 
 func (xform *bodySafetyTransformer) reorderObjectComprehensionSafety(oc *ObjectComprehension) {
-	tv := oc.Key.Vars()
+	tv := oc.Key.Vars().OrEmpty()
 	tv.Update(oc.Value.Vars())
 	oc.Body = xform.reorderComprehensionSafety(tv, oc.Body)
 }
@@ -4076,9 +4081,8 @@ func (xform *bodySafetyTransformer) reorderSetComprehensionSafety(sc *SetCompreh
 // unsafeVarsInClosures collects vars that are contained in closures within
 // this expression.
 func unsafeVarsInClosures(e *Expr) VarSet {
-	vs := VarSet{}
+	vis := NewVarVisitor()
 	WalkClosures(e, func(x interface{}) bool {
-		vis := &VarVisitor{vars: vs}
 		if ev, ok := x.(*Every); ok {
 			vis.Walk(ev.Body)
 			return true
@@ -4086,7 +4090,7 @@ func unsafeVarsInClosures(e *Expr) VarSet {
 		vis.Walk(x)
 		return true
 	})
-	return vs
+	return vis.Vars()
 }
 
 // OutputVarsFromBody returns all variables which are the "output" for
@@ -4099,7 +4103,8 @@ func OutputVarsFromBody(c *Compiler, body Body, safe VarSet) VarSet {
 func outputVarsForBody(body Body, arity func(Ref) int, safe VarSet) VarSet {
 	o := safe.Copy()
 	for _, e := range body {
-		o.Update(outputVarsForExpr(e, arity, o))
+		ov := outputVarsForExpr(e, arity, o)
+		o.Update(ov)
 	}
 	return o.Diff(safe)
 }
@@ -4115,18 +4120,21 @@ func outputVarsForExpr(expr *Expr, arity func(Ref) int, safe VarSet) VarSet {
 
 	// Negated expressions must be safe.
 	if expr.Negated {
-		return VarSet{}
+		return nil
 	}
+
+	vis := NewVarVisitor().WithParams(SafetyCheckVisitorParams)
 
 	// With modifier inputs must be safe.
 	for _, with := range expr.With {
-		vis := NewVarVisitor().WithParams(SafetyCheckVisitorParams)
 		vis.Walk(with)
-		vars := vis.Vars()
-		unsafe := vars.Diff(safe)
+		unsafe := vis.Vars().Diff(safe)
 		if len(unsafe) > 0 {
-			return VarSet{}
+			vis.vars = nil
+			return nil
 		}
+
+		clear(vis.vars)
 	}
 
 	switch terms := expr.Terms.(type) {
@@ -4139,12 +4147,12 @@ func outputVarsForExpr(expr *Expr, arity func(Ref) int, safe VarSet) VarSet {
 
 		operator, ok := terms[0].Value.(Ref)
 		if !ok {
-			return VarSet{}
+			return nil
 		}
 
 		ar := arity(operator)
 		if ar < 0 {
-			return VarSet{}
+			return nil
 		}
 
 		return outputVarsForExprCall(expr, ar, safe, terms)
@@ -4156,12 +4164,11 @@ func outputVarsForExpr(expr *Expr, arity func(Ref) int, safe VarSet) VarSet {
 }
 
 func outputVarsForExprEq(expr *Expr, safe VarSet) VarSet {
-
 	if !validEqAssignArgCount(expr) {
 		return safe
 	}
 
-	output := outputVarsForTerms(expr, safe)
+	output := outputVarsForTerms(expr, safe).OrEmpty()
 	output.Update(safe)
 	output.Update(Unify(output, expr.Operand(0), expr.Operand(1)))
 
@@ -4188,17 +4195,21 @@ func outputVarsForExprCall(expr *Expr, arity int, safe VarSet, terms []*Term) Va
 	unsafe := vis.Vars().Diff(output).Diff(safe)
 
 	if len(unsafe) > 0 {
-		return VarSet{}
+		return nil
 	}
 
-	vis = NewVarVisitor().WithParams(params)
+	vis.Clear()
+	vis = vis.WithParams(params)
 	vis.Walk(Args(terms[numInputTerms:]))
-	output.Update(vis.vars)
+	if output == nil {
+		return vis.Vars()
+	}
+	output.Update(vis.Vars())
 	return output
 }
 
 func outputVarsForTerms(expr interface{}, safe VarSet) VarSet {
-	output := VarSet{}
+	var output VarSet
 	WalkTerms(expr, func(x *Term) bool {
 		switch r := x.Value.(type) {
 		case *SetComprehension, *ArrayComprehension, *ObjectComprehension:
@@ -4207,7 +4218,11 @@ func outputVarsForTerms(expr interface{}, safe VarSet) VarSet {
 			if !isRefSafe(r, safe) {
 				return true
 			}
-			output.Update(r.OutputVars())
+			if output == nil {
+				output = r.OutputVars()
+			} else {
+				output.Update(r.OutputVars())
+			}
 			return false
 		}
 		return false
@@ -4238,19 +4253,17 @@ type localVarGenerator struct {
 }
 
 func newLocalVarGeneratorForModuleSet(sorted []string, modules map[string]*Module) *localVarGenerator {
-	exclude := NewVarSet()
-	vis := &VarVisitor{vars: exclude}
+	vis := NewVarVisitor()
 	for _, key := range sorted {
 		vis.Walk(modules[key])
 	}
-	return &localVarGenerator{exclude: exclude, next: 0}
+	return &localVarGenerator{exclude: vis.Vars(), next: 0}
 }
 
 func newLocalVarGenerator(suffix string, node interface{}) *localVarGenerator {
-	exclude := NewVarSet()
-	vis := &VarVisitor{vars: exclude}
+	vis := NewVarVisitor()
 	vis.Walk(node)
-	return &localVarGenerator{exclude: exclude, suffix: suffix, next: 0}
+	return &localVarGenerator{exclude: vis.Vars(), suffix: suffix, next: 0}
 }
 
 func (l *localVarGenerator) Generate() Var {
@@ -4293,8 +4306,7 @@ func requiresEval(x *Term) bool {
 }
 
 func resolveRef(globals map[Var]*usedRef, ignore *declaredVarStack, ref Ref) Ref {
-
-	r := Ref{}
+	r := make(Ref, 0, len(ref))
 	for i, x := range ref {
 		switch v := x.Value.(type) {
 		case Var:
@@ -4327,22 +4339,71 @@ type usedRef struct {
 	used bool
 }
 
-func resolveRefsInRule(globals map[Var]*usedRef, rule *Rule) error {
-	ignore := &declaredVarStack{}
+func termCanHaveRefs(term *Term) bool {
+	if term == nil || IsScalar(term.Value) {
+		return false
+	}
+	return true
+}
 
-	vars := NewVarSet()
+func headCanHaveRefs(head *Head) bool {
+	if head == nil {
+		return false
+	}
+
+	return slices.ContainsFunc(head.Ref()[1:], termCanHaveRefs) ||
+		slices.ContainsFunc(head.Args, termCanHaveRefs) ||
+		termCanHaveRefs(head.Key) ||
+		termCanHaveRefs(head.Value)
+}
+
+// Try to identify "empty" or generated bodies to that we can avoid
+// them when walking for vars and such. Note that in this context, it
+// doesn't matter if the rule body is generated or user created — a single
+// scalar in the body counts as empty (for lack of a better word, perhaps).
+func bodyCanHaveRefs(body Body) bool {
+	if len(body) == 0 {
+		return false
+	}
+	if len(body) == 1 {
+		if body[0].With != nil {
+			return true
+		}
+		if t, ok := body[0].Terms.(*Term); ok {
+			return !IsScalar(t.Value)
+		}
+	}
+	// TODO: any other common cases where it's cheap to determine
+	// we don't need to resolve any refs in the body?
+	return true
+}
+
+func ruleCanHaveRefs(rule *Rule) bool {
+	return headCanHaveRefs(rule.Head) || bodyCanHaveRefs(rule.Body)
+}
+
+func resolveRefsInRule(globals map[Var]*usedRef, rule *Rule) error {
+	if !ruleCanHaveRefs(rule) {
+		return nil
+	}
+
+	var vars VarSet
 	var vis *GenericVisitor
 	var err error
 
 	// Walk args to collect vars and transform body so that callers can shadow
 	// root documents.
-	vis = NewGenericVisitor(func(x interface{}) bool {
+	vis = NewGenericVisitor(func(x any) bool {
 		if err != nil {
 			return true
 		}
 		switch x := x.(type) {
 		case Var:
-			vars.Add(x)
+			if vars == nil {
+				vars = NewVarSet(x)
+			} else {
+				vars.Add(x)
+			}
 
 		// Object keys cannot be pattern matched so only walk values.
 		case *object:
@@ -4377,7 +4438,10 @@ func resolveRefsInRule(globals map[Var]*usedRef, rule *Rule) error {
 		return err
 	}
 
-	ignore.Push(vars)
+	ignore := &declaredVarStack{}
+	if vars != nil {
+		ignore.Push(vars)
+	}
 	ignore.Push(declaredVars(rule.Body))
 
 	ref := rule.Head.Ref()
@@ -4392,7 +4456,9 @@ func resolveRefsInRule(globals map[Var]*usedRef, rule *Rule) error {
 		rule.Head.Value = resolveRefsInTerm(globals, ignore, rule.Head.Value)
 	}
 
-	rule.Body = resolveRefsInBody(globals, ignore, rule.Body)
+	if bodyCanHaveRefs(rule.Body) {
+		rule.Body = resolveRefsInBody(globals, ignore, rule.Body)
+	}
 	return nil
 }
 
@@ -5247,13 +5313,17 @@ func checkUnusedAssignedVars(body Body, stack *localDeclaredVars, used VarSet, e
 	}
 
 	dvs := stack.Peek()
-	unused := NewVarSet()
+	var unused VarSet
 
 	for v, occ := range dvs.occurrence {
 		// A var that was assigned in this scope must have been seen (used) more than once (the time of assignment) in
 		// the same, or nested, scope to be counted as used.
 		if !v.IsWildcard() && stack.Count(v) <= 1 && occ == assignedVar {
-			unused.Add(dvs.vs[v])
+			if unused == nil {
+				unused = NewVarSet(dvs.vs[v])
+			} else {
+				unused.Add(dvs.vs[v])
+			}
 		}
 	}
 
@@ -5302,7 +5372,7 @@ func checkUnusedDeclaredVars(body Body, stack *localDeclaredVars, used VarSet, c
 		}
 	}
 
-	bodyvars := cpy.Vars(VarVisitorParams{})
+	bodyvars := cpy.Vars(VarVisitorParams{}).OrEmpty()
 
 	for v := range used {
 		if gv, ok := stack.Declared(v); ok {
@@ -5371,8 +5441,7 @@ func rewriteEveryStatement(g *localVarGenerator, stack *localDeclaredVars, expr 
 		every.Value.Value = gv
 	}
 
-	used := NewVarSet()
-	every.Body, errs = rewriteDeclaredVarsInBody(g, stack, used, every.Body, errs, strict)
+	every.Body, errs = rewriteDeclaredVarsInBody(g, stack, nil, every.Body, errs, strict)
 
 	return rewriteDeclaredVarsInExpr(g, stack, e, errs, strict)
 }

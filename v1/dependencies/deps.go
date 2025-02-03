@@ -281,6 +281,9 @@ func ruleDeps(rule *ast.Rule) (resolved []ast.Ref) {
 	}
 
 	usedVars := varVisitor.Vars()
+	if usedVars == nil {
+		usedVars = ast.NewVarSet()
+	}
 
 	// Vars included in refs must be counted as used.
 	ast.WalkRefs(rule.Body, func(r ast.Ref) bool {
@@ -400,7 +403,7 @@ func resolveOthers(others []*ast.Expr, headVars ast.VarSet, joined map[ast.Var]*
 			if r, ok := term.Value.(ast.Ref); ok {
 				end := r[len(r)-1]
 				v, ok := end.Value.(ast.Var)
-				if ok && headVars.Contains(v) {
+				if ok && headVars != nil && headVars.Contains(v) {
 					headRefs = append(headRefs, expandRef(r, joined)...)
 					continue
 				}

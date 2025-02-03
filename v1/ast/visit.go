@@ -558,9 +558,7 @@ type VarVisitorParams struct {
 
 // NewVarVisitor returns a new VarVisitor object.
 func NewVarVisitor() *VarVisitor {
-	return &VarVisitor{
-		vars: NewVarSet(),
-	}
+	return &VarVisitor{}
 }
 
 // WithParams sets the parameters in params on vis.
@@ -569,9 +567,29 @@ func (vis *VarVisitor) WithParams(params VarVisitorParams) *VarVisitor {
 	return vis
 }
 
+func (vis *VarVisitor) Add(v Var) {
+	if vis.vars == nil {
+		vis.vars = NewVarSet(v)
+	} else {
+		vis.vars.Add(v)
+	}
+}
+
 // Vars returns a VarSet that contains collected vars.
 func (vis *VarVisitor) Vars() VarSet {
 	return vis.vars
+}
+
+// Clear resets the VarVisitor var set and params so that it can be reused.
+func (vis *VarVisitor) Clear() {
+	// TODO: clear map instead?
+	vis.vars = nil
+	vis.params.SkipRefHead = false
+	vis.params.SkipRefCallHead = false
+	vis.params.SkipObjectKeys = false
+	vis.params.SkipClosures = false
+	vis.params.SkipWithTarget = false
+	vis.params.SkipSets = false
 }
 
 // visit determines if the VarVisitor will recurse into x: if it returns `true`,
@@ -661,7 +679,7 @@ func (vis *VarVisitor) visit(v interface{}) bool {
 		}
 	}
 	if v, ok := v.(Var); ok {
-		vis.vars.Add(v)
+		vis.Add(v)
 	}
 	return false
 }

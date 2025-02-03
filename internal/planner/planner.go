@@ -536,8 +536,10 @@ func (p *Planner) planQueries() error {
 		qvs := ast.NewVarSet()
 
 		for _, q := range qs.Queries {
-			vs := q.Vars(ast.VarVisitorParams{SkipRefCallHead: true, SkipClosures: true}).Diff(ast.ReservedVars)
-			qvs.Update(vs)
+			if vars := q.Vars(ast.VarVisitorParams{SkipRefCallHead: true, SkipClosures: true}); vars != nil {
+				vs := vars.Diff(ast.ReservedVars)
+				qvs.Update(vs)
+			}
 		}
 
 		lvarnames := make(map[ast.Var]ir.StringIndex, len(qvs))

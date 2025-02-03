@@ -6,6 +6,7 @@ package ast
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/open-policy-agent/opa/v1/util"
@@ -16,9 +17,10 @@ type VarSet map[Var]struct{}
 
 // NewVarSet returns a new VarSet containing the specified variables.
 func NewVarSet(vs ...Var) VarSet {
-	s := VarSet{}
+	// overallocating slightly cheaper than growing
+	s := make(VarSet, len(vs)*2)
 	for _, v := range vs {
-		s.Add(v)
+		s[v] = struct{}{}
 	}
 	return s
 }
@@ -30,6 +32,9 @@ func (s VarSet) Add(v Var) {
 
 // Contains returns true if the set contains the variable "v".
 func (s VarSet) Contains(v Var) bool {
+	if s == nil {
+		return false
+	}
 	_, ok := s[v]
 	return ok
 }
@@ -45,10 +50,18 @@ func (s VarSet) Copy() VarSet {
 
 // Diff returns a VarSet containing variables in s that are not in vs.
 func (s VarSet) Diff(vs VarSet) VarSet {
+	if s == nil {
+		return nil
+	}
+	if vs == nil {
+		return s.Copy()
+	}
+
 	r := VarSet{}
 	for v := range s {
-		if !vs.Contains(v) {
-			r.Add(v)
+		_, ok := vs[v]
+		if !ok {
+			r[v] = struct{}{}
 		}
 	}
 	return r
@@ -64,17 +77,25 @@ func (s VarSet) Equal(vs VarSet) bool {
 
 // Intersect returns a VarSet containing variables in s that are in vs.
 func (s VarSet) Intersect(vs VarSet) VarSet {
+	if s == nil {
+		return nil
+	}
+
 	r := VarSet{}
 	for v := range s {
-		if vs.Contains(v) {
-			r.Add(v)
+		_, ok := vs[v]
+		if ok {
+			r[v] = struct{}{}
 		}
 	}
 	return r
 }
 
-// Sorted returns a sorted slice of vars from s.
+// Sorted returns a sorted slice of vars from s. If s is nil, Sorted returns nil.
 func (s VarSet) Sorted() []Var {
+	if s == nil {
+		return nil
+	}
 	sorted := make([]Var, 0, len(s))
 	for v := range s {
 		sorted = append(sorted, v)
@@ -85,9 +106,20 @@ func (s VarSet) Sorted() []Var {
 
 // Update merges the other VarSet into this VarSet.
 func (s VarSet) Update(vs VarSet) {
-	for v := range vs {
-		s.Add(v)
+	maps.Copy(s, vs)
+}
+
+// OrEmpty returns the VarSet if it is not nil. Otherwise, it returns an empty VarSet.
+func (s VarSet) OrEmpty() VarSet {
+	if s == nil {
+		return VarSet{}
 	}
+	return s
+}
+
+// Clear removes all variables from the set.
+func (s VarSet) Clear() {
+	clear(s)
 }
 
 func (s VarSet) String() string {

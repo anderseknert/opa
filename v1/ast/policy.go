@@ -1057,23 +1057,25 @@ func (head *Head) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// Vars returns a set of vars found in the head.
+// Vars returns a set of vars found in the head, which may be nil if head contains no vars.
 func (head *Head) Vars() VarSet {
-	vis := &VarVisitor{vars: VarSet{}}
+	vis := NewVarVisitor()
 	// TODO: improve test coverage for this.
-	if head.Args != nil {
-		vis.Walk(head.Args)
+	for _, term := range head.Args {
+		vis.Walk(term.Value)
 	}
 	if head.Key != nil {
-		vis.Walk(head.Key)
+		vis.Walk(head.Key.Value)
 	}
 	if head.Value != nil {
-		vis.Walk(head.Value)
+		vis.Walk(head.Value.Value)
 	}
 	if len(head.Reference) > 0 {
-		vis.Walk(head.Reference[1:])
+		for _, term := range head.Reference[1:] {
+			vis.Walk(term.Value)
+		}
 	}
-	return vis.vars
+	return vis.Vars()
 }
 
 // Loc returns the Location of head.
@@ -1129,9 +1131,11 @@ func (a Args) SetLoc(loc *Location) {
 
 // Vars returns a set of vars that appear in a.
 func (a Args) Vars() VarSet {
-	vis := &VarVisitor{vars: VarSet{}}
-	vis.Walk(a)
-	return vis.vars
+	vis := NewVarVisitor()
+	for _, t := range a {
+		vis.Walk(t.Value)
+	}
+	return vis.Vars()
 }
 
 // NewBody returns a new Body containing the given expressions. The indices of
@@ -1627,8 +1631,8 @@ func (expr *Expr) UnmarshalJSON(bs []byte) error {
 	return unmarshalExpr(expr, v)
 }
 
-// Vars returns a VarSet containing variables in expr. The params can be set to
-// control which vars are included.
+// Vars returns a VarSet containing variables in expr or nil if there are none.
+// The params can be set to control which vars are included.
 func (expr *Expr) Vars(params VarVisitorParams) VarSet {
 	vis := NewVarVisitor().WithParams(params)
 	vis.Walk(expr)
@@ -1785,12 +1789,12 @@ func (q *Every) Compare(other *Every) int {
 // KeyValueVars returns the key and val arguments of an `every`
 // expression, if they are non-nil and not wildcards.
 func (q *Every) KeyValueVars() VarSet {
-	vis := &VarVisitor{vars: VarSet{}}
+	vis := NewVarVisitor()
 	if q.Key != nil {
 		vis.Walk(q.Key)
 	}
 	vis.Walk(q.Value)
-	return vis.vars
+	return vis.Vars()
 }
 
 func (q *Every) MarshalJSON() ([]byte, error) {
