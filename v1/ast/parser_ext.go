@@ -23,7 +23,7 @@ import (
 // MustParseBody returns a parsed body.
 // If an error occurs during parsing, panic.
 func MustParseBody(input string) Body {
-	return MustParseBodyWithOpts(input, ParserOptions{})
+	return MustParseBodyWithOpts(input, ParserOptions{SkipRules: true})
 }
 
 // MustParseBodyWithOpts returns a parsed body.

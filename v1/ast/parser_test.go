@@ -2210,12 +2210,6 @@ func TestRule(t *testing.T) {
 1:14: rego_parse_error: unexpected eq token: expected rule value term (e.g., f := <VALUE> { ... })
 	f := { "foo" = "bar" }
 	             ^`)
-	assertParseErrorContains(t, "no output", `f[_] := { "foo" = "bar" }`, `rego_parse_error: unexpected eq token: non-terminated set
-	f[_] := { "foo" = "bar" }
-	                ^
-1:17: rego_parse_error: unexpected eq token: expected rule value term (e.g., f[_] := <VALUE> { ... })
-	f[_] := { "foo" = "bar" }
-	                ^`)
 	assertParseErrorContains(t, "no output", `default f :=`, `rego_parse_error: unexpected eof token
 	default f :=
 	           ^
@@ -6376,6 +6370,61 @@ allow if {
 	assertLocationText(t, "# METADATA\n# title: rule", m.Annotations[1].Location)
 
 	assertLocationText(t, "# METADATA\n# title: rule", m.Rules[0].Annotations[0].Location)
+}
+
+func TestLoneUnderscoreNotAllowedInPackageOrRuleName(t *testing.T) {
+	tests := []struct {
+		note     string
+		module   string
+		expected string
+	}{
+		{
+			note:     "invalid package name:  _",
+			module:   `package _`,
+			expected: "invalid package name: _",
+		},
+		{
+			note:     "invalid package path",
+			module:   `package _.foo`,
+			expected: "invalid package name: _ not allowed as part of reference",
+		},
+		{
+			note:     "invalid package path",
+			module:   `package foo._`,
+			expected: "invalid package name: _ not allowed as part of reference",
+		},
+		{
+			note: "invalid rule name:  _",
+			module: `package p
+			_ := true`,
+			expected: "invalid rule name: _",
+		},
+		{
+			note: "_ in ref head var",
+			module: `package p
+			_.foo = true`,
+			expected: "invalid rule name: _ not allowed as part of reference",
+		},
+		{
+			note: "_ in ref head string",
+			module: `package p
+			foo._ = true`,
+			expected: "invalid rule name: _ not allowed as part of reference",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.note, func(t *testing.T) {
+			_, err := ParseModule("", tc.module)
+			if err == nil {
+				t.Fatal("Expected parse error")
+			}
+
+			if !strings.Contains(err.Error(), tc.expected) {
+				t.Errorf("Expected error to contain %q but got %q", tc.expected, err)
+			}
+		})
+	}
 }
 
 func assertLocationText(t *testing.T, expected string, actual *Location) {

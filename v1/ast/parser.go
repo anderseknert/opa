@@ -605,6 +605,10 @@ func (p *Parser) parsePackage() *Package {
 		return nil
 	}
 
+	if !p.validateRefName(pkg.Path, "package") {
+		return nil
+	}
+
 	return &pkg
 }
 
@@ -959,7 +963,6 @@ func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
 
 	switch x := ref.Value.(type) {
 	case Var:
-		// TODO
 		head = VarHead(x, ref.Location, nil)
 	case Ref:
 		head = RefHead(x)
@@ -983,7 +986,12 @@ func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
 		return nil, false
 	}
 
-	name := head.Ref().String()
+	headRef := head.Ref()
+	name := headRef.String()
+
+	if !p.validateRefName(headRef, "rule") {
+		return nil, false
+	}
 
 	switch p.s.tok {
 	case tokens.Contains: // NOTE: no Value for `contains` heads, we return here
@@ -1030,6 +1038,31 @@ func (p *Parser) parseHead(defaultRule bool) (*Head, bool) {
 		}
 	}
 	return head, false
+}
+
+var wildcardPattern = regexp.MustCompile(`^\$[0-9]+$`)
+
+// validateRefName validates a given ref for use a package or rule name.
+func (p *Parser) validateRefName(r Ref, typ string) bool {
+	for i := range r {
+		switch x := r[i].Value.(type) {
+		case Var:
+			if x.IsWildcard() {
+				if len(r) == 1 {
+					p.errorf(r[i].Location, "invalid %s name: _", typ)
+				} else {
+					p.errorf(r[i].Location, "invalid %s name: _ not allowed as part of reference", typ)
+				}
+				return false
+			}
+		case String:
+			if x == "_" || wildcardPattern.MatchString(string(x)) {
+				p.errorf(r[i].Location, "invalid %s name: _ not allowed as part of reference", typ)
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (p *Parser) parseBody(end tokens.Token) Body {
