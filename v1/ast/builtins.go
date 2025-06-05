@@ -342,6 +342,7 @@ var Equality = &Builtin{
 		types.Args(types.A, types.A),
 		types.B,
 	),
+	IgnoresContext: true,
 }
 
 /**
@@ -356,6 +357,7 @@ var Assign = &Builtin{
 		types.Args(types.A, types.A),
 		types.B,
 	),
+	IgnoresContext: true,
 }
 
 // Member represents the `in` (infix) operator.
@@ -369,6 +371,7 @@ var Member = &Builtin{
 		),
 		types.B,
 	),
+	IgnoresContext: true,
 }
 
 // MemberWithKey represents the `in` (infix) operator when used
@@ -384,6 +387,7 @@ var MemberWithKey = &Builtin{
 		),
 		types.B,
 	),
+	IgnoresContext: true,
 }
 
 /**
@@ -402,6 +406,7 @@ var GreaterThan = &Builtin{
 		),
 		types.Named("result", types.B).Description("true if `x` is greater than `y`; false otherwise"),
 	),
+	IgnoresContext: true,
 }
 
 var GreaterThanEq = &Builtin{
@@ -415,6 +420,7 @@ var GreaterThanEq = &Builtin{
 		),
 		types.Named("result", types.B).Description("true if `x` is greater or equal to `y`; false otherwise"),
 	),
+	IgnoresContext: true,
 }
 
 // LessThan represents the "<" comparison operator.
@@ -429,6 +435,7 @@ var LessThan = &Builtin{
 		),
 		types.Named("result", types.B).Description("true if `x` is less than `y`; false otherwise"),
 	),
+	IgnoresContext: true,
 }
 
 var LessThanEq = &Builtin{
@@ -442,6 +449,7 @@ var LessThanEq = &Builtin{
 		),
 		types.Named("result", types.B).Description("true if `x` is less than or equal to `y`; false otherwise"),
 	),
+	IgnoresContext: true,
 }
 
 var NotEqual = &Builtin{
@@ -455,6 +463,7 @@ var NotEqual = &Builtin{
 		),
 		types.Named("result", types.B).Description("true if `x` is not equal to `y`; false otherwise"),
 	),
+	IgnoresContext: true,
 }
 
 // Equal represents the "==" comparison operator.
@@ -469,6 +478,7 @@ var Equal = &Builtin{
 		),
 		types.Named("result", types.B).Description("true if `x` is equal to `y`; false otherwise"),
 	),
+	IgnoresContext: true,
 }
 
 /**
@@ -487,7 +497,8 @@ var Plus = &Builtin{
 		),
 		types.Named("z", types.N).Description("the sum of `x` and `y`"),
 	),
-	Categories: number,
+	Categories:     number,
+	IgnoresContext: true,
 }
 
 var Minus = &Builtin{
@@ -501,7 +512,8 @@ var Minus = &Builtin{
 		),
 		types.Named("z", types.NewAny(types.N, types.SetOfAny)).Description("the difference of `x` and `y`"),
 	),
-	Categories: category("sets", "numbers"),
+	Categories:     category("sets", "numbers"),
+	IgnoresContext: true,
 }
 
 var Multiply = &Builtin{
@@ -515,7 +527,8 @@ var Multiply = &Builtin{
 		),
 		types.Named("z", types.N).Description("the product of `x` and `y`"),
 	),
-	Categories: number,
+	Categories:     number,
+	IgnoresContext: true,
 }
 
 var Divide = &Builtin{
@@ -529,7 +542,8 @@ var Divide = &Builtin{
 		),
 		types.Named("z", types.N).Description("the result of `x` divided by `y`"),
 	),
-	Categories: number,
+	Categories:     number,
+	IgnoresContext: true,
 }
 
 var Round = &Builtin{
@@ -541,7 +555,8 @@ var Round = &Builtin{
 		),
 		types.Named("y", types.N).Description("the result of rounding `x`"),
 	),
-	Categories: number,
+	Categories:     number,
+	IgnoresContext: true,
 }
 
 var Ceil = &Builtin{
@@ -553,7 +568,8 @@ var Ceil = &Builtin{
 		),
 		types.Named("y", types.N).Description("the result of rounding `x` _up_"),
 	),
-	Categories: number,
+	Categories:     number,
+	IgnoresContext: true,
 }
 
 var Floor = &Builtin{
@@ -565,7 +581,8 @@ var Floor = &Builtin{
 		),
 		types.Named("y", types.N).Description("the result of rounding `x` _down_"),
 	),
-	Categories: number,
+	Categories:     number,
+	IgnoresContext: true,
 }
 
 var Abs = &Builtin{
@@ -577,7 +594,8 @@ var Abs = &Builtin{
 		),
 		types.Named("y", types.N).Description("the absolute value of `x`"),
 	),
-	Categories: number,
+	Categories:     number,
+	IgnoresContext: true,
 }
 
 var Rem = &Builtin{
@@ -591,7 +609,8 @@ var Rem = &Builtin{
 		),
 		types.Named("z", types.N).Description("the remainder"),
 	),
-	Categories: number,
+	Categories:     number,
+	IgnoresContext: true,
 }
 
 /**
@@ -686,7 +705,8 @@ var And = &Builtin{
 		),
 		types.Named("z", types.SetOfAny).Description("the intersection of `x` and `y`"),
 	),
-	Categories: sets,
+	Categories:     sets,
+	IgnoresContext: true,
 }
 
 // Or performs a union operation on sets.
@@ -701,7 +721,8 @@ var Or = &Builtin{
 		),
 		types.Named("z", types.SetOfAny).Description("the union of `x` and `y`"),
 	),
-	Categories: sets,
+	Categories:     sets,
+	IgnoresContext: true,
 }
 
 var Intersection = &Builtin{
@@ -713,7 +734,8 @@ var Intersection = &Builtin{
 		),
 		types.Named("y", types.SetOfAny).Description("the intersection of all `xs` sets"),
 	),
-	Categories: sets,
+	Categories:     sets,
+	IgnoresContext: true,
 }
 
 var Union = &Builtin{
@@ -725,7 +747,8 @@ var Union = &Builtin{
 		),
 		types.Named("y", types.SetOfAny).Description("the union of all `xs` sets"),
 	),
-	Categories: sets,
+	Categories:     sets,
+	IgnoresContext: true,
 }
 
 /**
@@ -748,7 +771,8 @@ var Count = &Builtin{
 		),
 		types.Named("n", types.N).Description("the count of elements, key/val pairs, or characters, respectively."),
 	),
-	Categories: aggregates,
+	Categories:     aggregates,
+	IgnoresContext: true,
 }
 
 var Sum = &Builtin{
@@ -763,7 +787,8 @@ var Sum = &Builtin{
 		),
 		types.Named("n", types.N).Description("the sum of all elements"),
 	),
-	Categories: aggregates,
+	Categories:     aggregates,
+	IgnoresContext: true,
 }
 
 var Product = &Builtin{
@@ -778,7 +803,8 @@ var Product = &Builtin{
 		),
 		types.Named("n", types.N).Description("the product of all elements"),
 	),
-	Categories: aggregates,
+	Categories:     aggregates,
+	IgnoresContext: true,
 }
 
 var Max = &Builtin{
@@ -793,7 +819,8 @@ var Max = &Builtin{
 		),
 		types.Named("n", types.A).Description("the maximum of all elements"),
 	),
-	Categories: aggregates,
+	Categories:     aggregates,
+	IgnoresContext: true,
 }
 
 var Min = &Builtin{
@@ -808,7 +835,8 @@ var Min = &Builtin{
 		),
 		types.Named("n", types.A).Description("the minimum of all elements"),
 	),
-	Categories: aggregates,
+	Categories:     aggregates,
+	IgnoresContext: true,
 }
 
 /**
@@ -827,7 +855,8 @@ var Sort = &Builtin{
 		),
 		types.Named("n", types.NewArray(nil, types.A)).Description("the sorted array"),
 	),
-	Categories: aggregates,
+	Categories:     aggregates,
+	IgnoresContext: true,
 }
 
 /**
@@ -844,6 +873,7 @@ var ArrayConcat = &Builtin{
 		),
 		types.Named("z", types.NewArray(nil, types.A)).Description("the concatenation of `x` and `y`"),
 	),
+	IgnoresContext: true,
 }
 
 var ArraySlice = &Builtin{
@@ -857,6 +887,7 @@ var ArraySlice = &Builtin{
 		),
 		types.Named("slice", types.NewArray(nil, types.A)).Description("the subslice of `array`, from `start` to `end`, including `arr[start]`, but excluding `arr[end]`"),
 	),
+	IgnoresContext: true,
 } // NOTE(sr): this function really needs examples
 
 var ArrayReverse = &Builtin{
@@ -868,6 +899,7 @@ var ArrayReverse = &Builtin{
 		),
 		types.Named("rev", types.NewArray(nil, types.A)).Description("an array containing the elements of `arr` in reverse order"),
 	),
+	IgnoresContext: true,
 }
 
 /**
@@ -889,7 +921,8 @@ var ToNumber = &Builtin{
 		),
 		types.Named("num", types.N).Description("the numeric representation of `x`"),
 	),
-	Categories: conversions,
+	Categories:     conversions,
+	IgnoresContext: true,
 }
 
 /**
@@ -917,6 +950,7 @@ var RegexIsValid = &Builtin{
 		),
 		types.Named("result", types.B).Description("true if `pattern` is a valid regular expression"),
 	),
+	IgnoresContext: true,
 }
 
 var RegexFindAllStringSubmatch = &Builtin{
@@ -989,6 +1023,7 @@ The set of regex symbols is limited for this builtin: only ` + "`.`, `*`, `+`, `
 		),
 		types.Named("result", types.B).Description("true if the intersection of `glob1` and `glob2` matches a non-empty set of non-empty strings"),
 	),
+	IgnoresContext: true,
 }
 
 /**
@@ -1051,7 +1086,8 @@ var Concat = &Builtin{
 		),
 		types.Named("output", types.S).Description("the joined string"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var FormatInt = &Builtin{
@@ -1064,7 +1100,8 @@ var FormatInt = &Builtin{
 		),
 		types.Named("output", types.S).Description("formatted number"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var IndexOf = &Builtin{
@@ -1077,7 +1114,8 @@ var IndexOf = &Builtin{
 		),
 		types.Named("output", types.N).Description("index of first occurrence, `-1` if not found"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var IndexOfN = &Builtin{
@@ -1090,7 +1128,8 @@ var IndexOfN = &Builtin{
 		),
 		types.Named("output", types.NewArray(nil, types.N)).Description("all indices at which `needle` occurs in `haystack`, may be empty"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var Substring = &Builtin{
@@ -1104,7 +1143,8 @@ var Substring = &Builtin{
 		),
 		types.Named("output", types.S).Description("substring of `value` from `offset`, of length `length`"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var Contains = &Builtin{
@@ -1117,7 +1157,8 @@ var Contains = &Builtin{
 		),
 		types.Named("result", types.B).Description("result of the containment check"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var StringCount = &Builtin{
@@ -1130,7 +1171,8 @@ var StringCount = &Builtin{
 		),
 		types.Named("output", types.N).Description("count of occurrences, `0` if not found"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var StartsWith = &Builtin{
@@ -1143,7 +1185,8 @@ var StartsWith = &Builtin{
 		),
 		types.Named("result", types.B).Description("result of the prefix check"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var EndsWith = &Builtin{
@@ -1156,7 +1199,8 @@ var EndsWith = &Builtin{
 		),
 		types.Named("result", types.B).Description("result of the suffix check"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var Lower = &Builtin{
@@ -1168,7 +1212,8 @@ var Lower = &Builtin{
 		),
 		types.Named("y", types.S).Description("lower-case of x"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var Upper = &Builtin{
@@ -1180,7 +1225,8 @@ var Upper = &Builtin{
 		),
 		types.Named("y", types.S).Description("upper-case of x"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var Split = &Builtin{
@@ -1193,7 +1239,8 @@ var Split = &Builtin{
 		),
 		types.Named("ys", types.NewArray(nil, types.S)).Description("split parts"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var Replace = &Builtin{
@@ -1207,7 +1254,8 @@ var Replace = &Builtin{
 		),
 		types.Named("y", types.S).Description("string with replaced substrings"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var ReplaceN = &Builtin{
@@ -1227,6 +1275,7 @@ The old string comparisons are done in argument order.`,
 		),
 		types.Named("output", types.S).Description("string with replaced substrings"),
 	),
+	IgnoresContext: true,
 }
 
 var RegexReplace = &Builtin{
@@ -1252,7 +1301,8 @@ var Trim = &Builtin{
 		),
 		types.Named("output", types.S).Description("string trimmed of `cutset` characters"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var TrimLeft = &Builtin{
@@ -1265,7 +1315,8 @@ var TrimLeft = &Builtin{
 		),
 		types.Named("output", types.S).Description("string left-trimmed of `cutset` characters"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var TrimPrefix = &Builtin{
@@ -1278,7 +1329,8 @@ var TrimPrefix = &Builtin{
 		),
 		types.Named("output", types.S).Description("string with `prefix` cut off"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var TrimRight = &Builtin{
@@ -1291,7 +1343,8 @@ var TrimRight = &Builtin{
 		),
 		types.Named("output", types.S).Description("string right-trimmed of `cutset` characters"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var TrimSuffix = &Builtin{
@@ -1304,7 +1357,8 @@ var TrimSuffix = &Builtin{
 		),
 		types.Named("output", types.S).Description("string with `suffix` cut off"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var TrimSpace = &Builtin{
@@ -1316,7 +1370,8 @@ var TrimSpace = &Builtin{
 		),
 		types.Named("output", types.S).Description("string leading and trailing white space cut off"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var Sprintf = &Builtin{
@@ -1329,7 +1384,8 @@ var Sprintf = &Builtin{
 		),
 		types.Named("output", types.S).Description("`format` formatted by the values in `values`"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var StringReverse = &Builtin{
@@ -1341,7 +1397,8 @@ var StringReverse = &Builtin{
 		),
 		types.Named("y", types.S).Description("reversed string"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 var RenderTemplate = &Builtin{
@@ -1355,7 +1412,8 @@ var RenderTemplate = &Builtin{
 		),
 		types.Named("result", types.S).Description("rendered template with template variables injected"),
 	),
-	Categories: stringsCat,
+	Categories:     stringsCat,
+	IgnoresContext: true,
 }
 
 /**
@@ -1429,6 +1487,7 @@ respectively. Other units are case-insensitive.`,
 		),
 		types.Named("y", types.N).Description("the parsed number"),
 	),
+	IgnoresContext: true,
 }
 
 var UnitsParseBytes = &Builtin{
@@ -1447,6 +1506,7 @@ and "MiB" are equivalent).`,
 		),
 		types.Named("y", types.N).Description("the parsed number"),
 	),
+	IgnoresContext: true,
 }
 
 //
@@ -1478,7 +1538,7 @@ var UUIDParse = &Builtin{
 		),
 		types.Named("result", types.NewObject(nil, types.NewDynamicProperty(types.S, types.A))).Description("Properties of UUID if valid (version, variant, etc). Undefined otherwise."),
 	),
-	Relation: false,
+	IgnoresContext: true,
 }
 
 /**
@@ -1522,7 +1582,8 @@ var JSONFilter = &Builtin{
 		),
 		types.Named("filtered", types.A).Description("remaining data from `object` with only keys specified in `paths`"),
 	),
-	Categories: objectCat,
+	Categories:     objectCat,
+	IgnoresContext: true,
 }
 
 var JSONRemove = &Builtin{
@@ -1560,7 +1621,8 @@ var JSONRemove = &Builtin{
 		),
 		types.Named("output", types.A).Description("result of removing all keys specified in `paths`"),
 	),
-	Categories: objectCat,
+	Categories:     objectCat,
+	IgnoresContext: true,
 }
 
 var JSONPatch = &Builtin{
@@ -1585,7 +1647,8 @@ var JSONPatch = &Builtin{
 		),
 		types.Named("output", types.A).Description("result obtained after consecutively applying all patch operations in `patches`"),
 	),
-	Categories: objectCat,
+	Categories:     objectCat,
+	IgnoresContext: true,
 }
 
 var ObjectSubset = &Builtin{
@@ -1619,6 +1682,7 @@ var ObjectSubset = &Builtin{
 		),
 		types.Named("result", types.A).Description("`true` if `sub` is a subset of `super`"),
 	),
+	IgnoresContext: true,
 }
 
 var ObjectUnion = &Builtin{
@@ -1638,6 +1702,7 @@ var ObjectUnion = &Builtin{
 		),
 		types.Named("output", types.A).Description("a new object which is the result of an asymmetric recursive union of two objects where conflicts are resolved by choosing the key from the right-hand object `b`"),
 	), // TODO(sr): types.A?  ^^^^^^^ (also below)
+	IgnoresContext: true,
 }
 
 var ObjectUnionN = &Builtin{
@@ -1653,6 +1718,7 @@ var ObjectUnionN = &Builtin{
 		),
 		types.Named("output", types.A).Description("asymmetric recursive union of all objects in `objects`, merged from left to right, where conflicts are resolved by choosing the key from the right-hand object"),
 	),
+	IgnoresContext: true,
 }
 
 var ObjectRemove = &Builtin{
@@ -1672,6 +1738,7 @@ var ObjectRemove = &Builtin{
 		),
 		types.Named("output", types.A).Description("result of removing the specified `keys` from `object`"),
 	),
+	IgnoresContext: true,
 }
 
 var ObjectFilter = &Builtin{
@@ -1692,6 +1759,7 @@ var ObjectFilter = &Builtin{
 		),
 		types.Named("filtered", types.A).Description("remaining data from `object` with only keys specified in `keys`"),
 	),
+	IgnoresContext: true,
 }
 
 var ObjectGet = &Builtin{
@@ -1707,6 +1775,7 @@ var ObjectGet = &Builtin{
 		),
 		types.Named("value", types.A).Description("`object[key]` if present, otherwise `default`"),
 	),
+	IgnoresContext: true,
 }
 
 var ObjectKeys = &Builtin{
@@ -1719,6 +1788,7 @@ var ObjectKeys = &Builtin{
 		),
 		types.Named("value", types.SetOfAny).Description("set of `object`'s keys"),
 	),
+	IgnoresContext: true,
 }
 
 /*
@@ -1735,7 +1805,8 @@ var JSONMarshal = &Builtin{
 		),
 		types.Named("y", types.S).Description("the JSON string representation of `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var JSONMarshalWithOptions = &Builtin{
@@ -1756,7 +1827,8 @@ var JSONMarshalWithOptions = &Builtin{
 		),
 		types.Named("y", types.S).Description("the JSON string representation of `x`, with configured prefix/indent string(s) as appropriate"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var JSONUnmarshal = &Builtin{
@@ -1768,7 +1840,8 @@ var JSONUnmarshal = &Builtin{
 		),
 		types.Named("y", types.A).Description("the term deserialized from `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var JSONIsValid = &Builtin{
@@ -1780,7 +1853,8 @@ var JSONIsValid = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if `x` is valid JSON, `false` otherwise"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var Base64Encode = &Builtin{
@@ -1792,7 +1866,8 @@ var Base64Encode = &Builtin{
 		),
 		types.Named("y", types.S).Description("base64 serialization of `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var Base64Decode = &Builtin{
@@ -1804,7 +1879,8 @@ var Base64Decode = &Builtin{
 		),
 		types.Named("y", types.S).Description("base64 deserialization of `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var Base64IsValid = &Builtin{
@@ -1816,7 +1892,8 @@ var Base64IsValid = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if `x` is valid base64 encoded value, `false` otherwise"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var Base64UrlEncode = &Builtin{
@@ -1828,7 +1905,8 @@ var Base64UrlEncode = &Builtin{
 		),
 		types.Named("y", types.S).Description("base64url serialization of `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var Base64UrlEncodeNoPad = &Builtin{
@@ -1840,7 +1918,8 @@ var Base64UrlEncodeNoPad = &Builtin{
 		),
 		types.Named("y", types.S).Description("base64url serialization of `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var Base64UrlDecode = &Builtin{
@@ -1852,7 +1931,8 @@ var Base64UrlDecode = &Builtin{
 		),
 		types.Named("y", types.S).Description("base64url deserialization of `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var URLQueryDecode = &Builtin{
@@ -1864,7 +1944,8 @@ var URLQueryDecode = &Builtin{
 		),
 		types.Named("y", types.S).Description("URL-encoding deserialization of `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var URLQueryEncode = &Builtin{
@@ -1876,7 +1957,8 @@ var URLQueryEncode = &Builtin{
 		),
 		types.Named("y", types.S).Description("URL-encoding serialization of `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var URLQueryEncodeObject = &Builtin{
@@ -1899,7 +1981,8 @@ var URLQueryEncodeObject = &Builtin{
 		),
 		types.Named("y", types.S).Description("the URL-encoded serialization of `object`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var URLQueryDecodeObject = &Builtin{
@@ -1913,7 +1996,8 @@ var URLQueryDecodeObject = &Builtin{
 			types.S,
 			types.NewArray(nil, types.S)))).Description("the resulting object"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var YAMLMarshal = &Builtin{
@@ -1925,7 +2009,8 @@ var YAMLMarshal = &Builtin{
 		),
 		types.Named("y", types.S).Description("the YAML string representation of `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var YAMLUnmarshal = &Builtin{
@@ -1937,7 +2022,8 @@ var YAMLUnmarshal = &Builtin{
 		),
 		types.Named("y", types.A).Description("the term deserialized from `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 // YAMLIsValid verifies the input string is a valid YAML document.
@@ -1950,7 +2036,8 @@ var YAMLIsValid = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if `x` is valid YAML, `false` otherwise"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var HexEncode = &Builtin{
@@ -1962,7 +2049,8 @@ var HexEncode = &Builtin{
 		),
 		types.Named("y", types.S).Description("serialization of `x` using hex-encoding"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 var HexDecode = &Builtin{
@@ -1974,7 +2062,8 @@ var HexDecode = &Builtin{
 		),
 		types.Named("y", types.S).Description("deserialized from `x`"),
 	),
-	Categories: encoding,
+	Categories:     encoding,
+	IgnoresContext: true,
 }
 
 /**
@@ -2465,6 +2554,7 @@ var CryptoMd5 = &Builtin{
 		),
 		types.Named("y", types.S).Description("MD5-hash of `x`"),
 	),
+	IgnoresContext: true,
 }
 
 var CryptoSha1 = &Builtin{
@@ -2476,6 +2566,7 @@ var CryptoSha1 = &Builtin{
 		),
 		types.Named("y", types.S).Description("SHA1-hash of `x`"),
 	),
+	IgnoresContext: true,
 }
 
 var CryptoSha256 = &Builtin{
@@ -2487,6 +2578,7 @@ var CryptoSha256 = &Builtin{
 		),
 		types.Named("y", types.S).Description("SHA256-hash of `x`"),
 	),
+	IgnoresContext: true,
 }
 
 var CryptoHmacMd5 = &Builtin{
@@ -2499,6 +2591,7 @@ var CryptoHmacMd5 = &Builtin{
 		),
 		types.Named("y", types.S).Description("MD5-HMAC of `x`"),
 	),
+	IgnoresContext: true,
 }
 
 var CryptoHmacSha1 = &Builtin{
@@ -2511,6 +2604,7 @@ var CryptoHmacSha1 = &Builtin{
 		),
 		types.Named("y", types.S).Description("SHA1-HMAC of `x`"),
 	),
+	IgnoresContext: true,
 }
 
 var CryptoHmacSha256 = &Builtin{
@@ -2523,6 +2617,7 @@ var CryptoHmacSha256 = &Builtin{
 		),
 		types.Named("y", types.S).Description("SHA256-HMAC of `x`"),
 	),
+	IgnoresContext: true,
 }
 
 var CryptoHmacSha512 = &Builtin{
@@ -2535,6 +2630,7 @@ var CryptoHmacSha512 = &Builtin{
 		),
 		types.Named("y", types.S).Description("SHA512-HMAC of `x`"),
 	),
+	IgnoresContext: true,
 }
 
 var CryptoHmacEqual = &Builtin{
@@ -2547,6 +2643,7 @@ var CryptoHmacEqual = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if the MACs are equals, `false` otherwise"),
 	),
+	IgnoresContext: true,
 }
 
 /**
@@ -2570,7 +2667,8 @@ var WalkBuiltin = &Builtin{
 			nil,
 		)).Description("pairs of `path` and `value`: `path` is an array representing the pointer to `value` in `x`. If `path` is assigned a wildcard (`_`), the `walk` function will skip path creation entirely for faster evaluation."),
 	),
-	Categories: graphs,
+	Categories:     graphs,
+	IgnoresContext: true,
 }
 
 var ReachableBuiltin = &Builtin{
@@ -2591,6 +2689,7 @@ var ReachableBuiltin = &Builtin{
 		),
 		types.Named("output", types.SetOfAny).Description("set of vertices reachable from the `initial` vertices in the directed `graph`"),
 	),
+	IgnoresContext: true,
 }
 
 var ReachablePathsBuiltin = &Builtin{
@@ -2611,6 +2710,7 @@ var ReachablePathsBuiltin = &Builtin{
 		),
 		types.Named("output", types.NewSet(types.NewArray(nil, types.A))).Description("paths reachable from the `initial` vertices in the directed `graph`"),
 	),
+	IgnoresContext: true,
 }
 
 /**
@@ -2627,7 +2727,8 @@ var IsNumber = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if `x` is a number, `false` otherwise."),
 	),
-	Categories: typesCat,
+	Categories:     typesCat,
+	IgnoresContext: true,
 }
 
 var IsString = &Builtin{
@@ -2639,7 +2740,8 @@ var IsString = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if `x` is a string, `false` otherwise."),
 	),
-	Categories: typesCat,
+	Categories:     typesCat,
+	IgnoresContext: true,
 }
 
 var IsBoolean = &Builtin{
@@ -2651,7 +2753,8 @@ var IsBoolean = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if `x` is an boolean, `false` otherwise."),
 	),
-	Categories: typesCat,
+	Categories:     typesCat,
+	IgnoresContext: true,
 }
 
 var IsArray = &Builtin{
@@ -2663,7 +2766,8 @@ var IsArray = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if `x` is an array, `false` otherwise."),
 	),
-	Categories: typesCat,
+	Categories:     typesCat,
+	IgnoresContext: true,
 }
 
 var IsSet = &Builtin{
@@ -2675,7 +2779,8 @@ var IsSet = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if `x` is a set, `false` otherwise."),
 	),
-	Categories: typesCat,
+	Categories:     typesCat,
+	IgnoresContext: true,
 }
 
 var IsObject = &Builtin{
@@ -2687,7 +2792,8 @@ var IsObject = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if `x` is an object, `false` otherwise."),
 	),
-	Categories: typesCat,
+	Categories:     typesCat,
+	IgnoresContext: true,
 }
 
 var IsNull = &Builtin{
@@ -2699,7 +2805,8 @@ var IsNull = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if `x` is null, `false` otherwise."),
 	),
-	Categories: typesCat,
+	Categories:     typesCat,
+	IgnoresContext: true,
 }
 
 /**
@@ -2716,7 +2823,8 @@ var TypeNameBuiltin = &Builtin{
 		),
 		types.Named("type", types.S).Description(`one of "null", "boolean", "number", "string", "array", "object", "set"`),
 	),
-	Categories: typesCat,
+	Categories:     typesCat,
+	IgnoresContext: true,
 }
 
 /**
@@ -3139,6 +3247,7 @@ var SemVerIsValid = &Builtin{
 		),
 		types.Named("result", types.B).Description("`true` if `vsn` is a valid SemVer; `false` otherwise"),
 	),
+	IgnoresContext: true,
 }
 
 var SemVerCompare = &Builtin{
@@ -3151,6 +3260,7 @@ var SemVerCompare = &Builtin{
 		),
 		types.Named("result", types.N).Description("`-1` if `a < b`; `1` if `a > b`; `0` if `a == b`"),
 	),
+	IgnoresContext: true,
 }
 
 /**
@@ -3335,6 +3445,7 @@ type Builtin struct {
 	Relation         bool            `json:"relation,omitempty"` // Indicates if the built-in acts as a relation.
 	deprecated       bool            // Indicates if the built-in has been deprecated.
 	Nondeterministic bool            `json:"nondeterministic,omitempty"` // Indicates if the built-in returns non-deterministic results.
+	IgnoresContext   bool            `json:"ignores_context,omitempty"`  // Indicates if the built-in ignores the built-in context passed to it.
 }
 
 // category is a helper for specifying a Builtin's Categories
