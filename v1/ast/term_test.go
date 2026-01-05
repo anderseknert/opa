@@ -1778,3 +1778,43 @@ func assertForced(t *testing.T, x Object, forced bool) {
 		t.Errorf("expected %v to be forced", l)
 	}
 }
+
+func TestAppendNoQuote(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "simple",
+			input: `foo`,
+			want:  `foo`,
+		},
+		{
+			name:  "with escape",
+			input: "\tfoo\nbar",
+			want:  "\\tfoo\\nbar",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sv := String(tc.input)
+			var buf []byte
+			buf = sv.appendNoQuote(buf)
+			got := string(buf)
+			if got != tc.want {
+				t.Errorf("%s: got  %q\nwant %q", tc.name, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAppendNoQuoteExistingBuffer(t *testing.T) {
+	sv := String("bar")
+	var buf []byte
+	buf = sv.appendNoQuote(append(buf, "foo"...))
+
+	if exp, got := "foobar", string(buf); got != exp {
+		t.Errorf("got  %s\nwant %s", got, exp)
+	}
+}

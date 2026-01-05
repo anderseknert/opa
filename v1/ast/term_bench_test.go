@@ -986,3 +986,18 @@ func BenchmarkCountUnescapedLeftCurly(b *testing.B) {
 		})
 	}
 }
+
+// 142.7 ns/op      96 B/op       8 allocs/op // original
+// 92.95 ns/op      32 B/op       1 allocs/op // using TextAppender, prealloc len, and ByteSliceToString
+func BenchmarkTemplateStringToString(b *testing.B) {
+	template := MustParseTerm(`$"Hello {foo}, {bar}!"`).Value.(*TemplateString)
+
+	var s string
+	for b.Loop() {
+		s = template.String()
+	}
+
+	if exp := `$"Hello {foo}, {bar}!"`; s != exp {
+		b.Fatalf("expected %q but got %q", exp, s)
+	}
+}
