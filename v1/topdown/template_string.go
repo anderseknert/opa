@@ -5,8 +5,6 @@
 package topdown
 
 import (
-	"strings"
-
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/topdown/builtins"
 )
@@ -17,27 +15,34 @@ func builtinTemplateString(bctx BuiltinContext, operands []*ast.Term, iter func(
 		return err
 	}
 
-	buf := make([]string, arr.Len())
+	w := opWriterPool.Get()
+	w.singleOutput = true
 
-	var count int
-	err = builtinPrintCrossProductOperands(bctx.Location, buf, arr, 0, func(buf []string) error {
-		count += 1
-		// Precautionary run-time assertion that template-strings can't produce multiple outputs; e.g. for custom relation type built-ins not known at compile-time.
-		if count > 1 {
-			return Halt{Err: &Error{
-				Code:     ConflictErr,
-				Location: bctx.Location,
-				Message:  "template-strings must not produce multiple outputs",
-			}}
-		}
-		return nil
-	})
+	w.Prepare(nil, arr, bctx.Location, outputFunc)
+	defer func() {
+		w.Clear()
+		opWriterPool.Put(w)
+	}()
 
-	if err != nil {
+	if err := builtinPrintCrossProductOperands(w, 0); err != nil {
 		return err
 	}
 
-	return iter(ast.StringTerm(strings.Join(buf, "")))
+	return iter(ast.InternedTermBytes(w.Bytes()))
+}
+
+func outputFunc(w *operandWriter) error {
+	w.count += 1
+	// Precautionary run-time assertion that template-strings can't produce multiple outputs;
+	// e.g. for custom relation type built-ins not known at compile-time.
+	if w.count > 1 {
+		return Halt{Err: &Error{
+			Code:     ConflictErr,
+			Location: w.loc,
+			Message:  "template-strings must not produce multiple outputs",
+		}}
+	}
+	return nil
 }
 
 func init() {

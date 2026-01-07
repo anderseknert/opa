@@ -972,10 +972,11 @@ func BenchmarkObjectGetFromBaseDoc(b *testing.B) {
 
 // templatestring           216386      5524 ns/op   10074 B/op	     158 allocs/op
 // templatestring                       5219 ns/op    8337 B/op      152 allocs/op don't pass bctx
+// templatestring                       5449 ns/op    7703 B/op      143 allocs/op
 // --
 // concat                   272054      4500 ns/op    6728 B/op	     123 allocs/op
 // sprintf                  280381      4421 ns/op    6365 B/op	     121 allocs/op
-func BenchmarkTemplateStringVsConcatVsSprintf(b *testing.B) {
+func BenchmarkEvalTemplateStringVsConcatVsSprintf(b *testing.B) {
 	ctx := b.Context()
 	store := inmem.NewFromObject(map[string]any{})
 
@@ -986,6 +987,7 @@ func BenchmarkTemplateStringVsConcatVsSprintf(b *testing.B) {
 	baz := "baz"
 
 	`
+	_ = modBase
 	tests := []struct {
 		name    string
 		snippet string
@@ -993,6 +995,29 @@ func BenchmarkTemplateStringVsConcatVsSprintf(b *testing.B) {
 		{
 			name:    "templatestring",
 			snippet: `s := $"{foo}-{bar}-{baz}"`,
+		},
+		{
+			name: "templatestring in function",
+			snippet: `
+			package test
+
+			fun(foo, bar, baz) := s if s := $"{foo}-{bar}-{baz}"
+
+			s := fun("foo", "bar", "baz")`,
+		},
+		{
+			name: "templatestring in head",
+			snippet: `
+			package test
+
+			o[$"{foo}-{bar}"] := $"{baz}" if {
+				foo := "foo"
+				[bar] := ["bar"]
+				baz := {"key":"baz"}[_]
+			}
+
+			s := "foo-bar-baz" if o["foo-bar"] == "baz"
+			`,
 		},
 		{
 			name:    "concat",
@@ -1005,14 +1030,23 @@ func BenchmarkTemplateStringVsConcatVsSprintf(b *testing.B) {
 	}
 
 	for _, tc := range tests {
-		policy := modBase + tc.snippet
+		//policy := modBase + tc.snippet
+		policy := tc.snippet
 
 		query := ast.MustParseBody("data.test.s = s")
 		compiler := ast.MustCompileModules(map[string]string{"test.rego": policy})
 
+		b.Log(compiler.Modules["test.rego"].String())
+
 		b.Run(tc.name, func(b *testing.B) {
 			err := storage.Txn(ctx, store, storage.TransactionParams{}, func(txn storage.Transaction) error {
-				q := NewQuery(query).WithCompiler(compiler).WithStore(store).WithTransaction(txn)
+				q := NewQuery(query).
+					WithCompiler(compiler).
+					WithStore(store).
+					WithInput(ast.ObjectTerm(ast.Item(ast.InternedTerm("baz"), ast.InternedTerm("baz")))).
+					WithTransaction(txn).
+					WithBaseCache(newBaseCache())
+
 				for b.Loop() {
 					rs, err := q.Run(ctx)
 					if err != nil {
@@ -1030,5 +1064,7 @@ func BenchmarkTemplateStringVsConcatVsSprintf(b *testing.B) {
 				b.Fatal(err)
 			}
 		})
+
+		b.Fail()
 	}
 }

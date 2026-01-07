@@ -1887,7 +1887,7 @@ func (p *Parser) parseNumber() *Term {
 func (p *Parser) parseString() *Term {
 	if p.s.lit[0] == '"' {
 		if p.s.lit == "\"\"" {
-			return NewTerm(InternedEmptyString.Value).SetLocation(p.s.Loc())
+			return NewTerm(InternedEmptyStringValue).SetLocation(p.s.Loc())
 		}
 
 		inner := p.s.lit[1 : len(p.s.lit)-1]
@@ -2892,18 +2892,18 @@ func (b *metadataParser) Parse() (*Annotations, error) {
 	result.Location = b.loc
 
 	// recreate original text of entire metadata block for location text attribute
-	sb := strings.Builder{}
-	sb.WriteString("# METADATA\n")
+	buf := &bytes.Buffer{}
+	buf.WriteString("# METADATA\n")
 
 	lines := bytes.Split(b.buf.Bytes(), []byte{'\n'})
 
 	for _, line := range lines[:len(lines)-1] {
-		sb.WriteString("# ")
-		sb.Write(line)
-		sb.WriteByte('\n')
+		buf.WriteString("# ")
+		buf.Write(line)
+		buf.WriteByte('\n')
 	}
 
-	result.Location.Text = []byte(strings.TrimSuffix(sb.String(), "\n"))
+	result.Location.Text = bytes.TrimSuffix(buf.Bytes(), []byte{'\n'})
 
 	return &result, nil
 }

@@ -10,26 +10,23 @@ import (
 	"github.com/open-policy-agent/opa/v1/topdown/print"
 )
 
-func TestTopDownPrint(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		note   string
-		module string
-		exp    string
-	}{
-		{
-			note: "empty",
-			module: `
+var print_cases = []struct {
+	note   string
+	module string
+	exp    string
+}{
+	{
+		note: "empty",
+		module: `
 				package test
 
 				p if { print() }
 			`,
-			exp: "\n",
-		},
-		{
-			note: "strings",
-			module: `
+		exp: "\n",
+	},
+	{
+		note: "strings",
+		module: `
 				package test
 
 				p if {
@@ -37,11 +34,11 @@ func TestTopDownPrint(t *testing.T) {
 					print("hello", x)
 				}
 			`,
-			exp: "hello world\n",
-		},
-		{
-			note: "collections",
-			module: `
+		exp: "hello world\n",
+	},
+	{
+		note: "collections",
+		module: `
 				package test
 
 				xs := [1,2]
@@ -50,44 +47,44 @@ func TestTopDownPrint(t *testing.T) {
 					print("the value of xs is:", xs)
 				}
 			`,
-			exp: "the value of xs is: [1, 2]\n",
-		},
-		{
-			note: "undefined - does not affect rule evaluation and output contains marker",
-			module: `
+		exp: "the value of xs is: [1, 2]\n",
+	},
+	{
+		note: "undefined - does not affect rule evaluation and output contains marker",
+		module: `
 				package test
 
 				p if {
 					print("the value of foo is:", input.foo)
 				}
 			`,
-			exp: "the value of foo is: <undefined>\n",
-		},
-		{
-			note: "undefined nested term does not affect rule evaluation and output contains marker",
-			module: `
+		exp: "the value of foo is: <undefined>\n",
+	},
+	{
+		note: "undefined nested term does not affect rule evaluation and output contains marker",
+		module: `
 				package test
 
 				p if {
 					print("the value of foo is:", [input.foo])
 				}
 			`,
-			exp: "the value of foo is: <undefined>\n",
-		},
-		{
-			note: "built-in error as undefined",
-			module: `
+		exp: "the value of foo is: <undefined>\n",
+	},
+	{
+		note: "built-in error as undefined",
+		module: `
 				package test
 
 				p if {
 					print("div by zero:", 1/0) # divide by zero will be undefined unless strict-builtin-errors are enabled
 				}
 			`,
-			exp: "div by zero: <undefined>\n",
-		},
-		{
-			note: "cross-product",
-			module: `
+		exp: "div by zero: <undefined>\n",
+	},
+	{
+		note: "cross-product",
+		module: `
 				package test
 
 				xs := {1}
@@ -97,15 +94,18 @@ func TestTopDownPrint(t *testing.T) {
 					print(walk(xs), walk(ys))
 				}
 			`,
-			exp: `[[], {1}] [[], {"a"}]
+		exp: `[[], {1}] [[], {"a"}]
 [[], {1}] [["a"], "a"]
 [[1], 1] [[], {"a"}]
 [[1], 1] [["a"], "a"]
 `,
-		},
-	}
+	},
+}
 
-	for _, tc := range cases {
+func TestTopDownPrint(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range print_cases {
 		t.Run(tc.note, func(t *testing.T) {
 			t.Parallel()
 

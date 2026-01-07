@@ -26,10 +26,11 @@ var (
 	InternedBooleanTrueTerm         = &Term{Value: InternedBooleanTrueValue}
 	InternedBooleanFalseTerm        = &Term{Value: InternedBooleanFalseValue}
 
-	InternedEmptyString = StringTerm("")
-	InternedEmptyObject = ObjectTerm()
-	InternedEmptyArray  = NewTerm(InternedEmptyArrayValue)
-	InternedEmptySet    = SetTerm()
+	InternedEmptyStringValue Value = String("")
+	InternedEmptyString            = NewTerm(InternedEmptyStringValue)
+	InternedEmptyObject            = ObjectTerm()
+	InternedEmptyArray             = NewTerm(InternedEmptyArrayValue)
+	InternedEmptySet               = SetTerm()
 
 	InternedEmptyArrayValue = NewArray()
 
@@ -195,6 +196,16 @@ func InternedTerm[T internable](v T) *Term {
 	default:
 		panic("unreachable")
 	}
+}
+
+func InternedTermBytes(b []byte) *Term {
+	// lookup optimized in Go to not allocate
+	if term, ok := internedStringTerms[string(b)]; ok {
+		return term
+	}
+
+	// We allocate here
+	return StringTerm(string(b))
 }
 
 // InternedItem works just like [Item] but returns interned terms for both

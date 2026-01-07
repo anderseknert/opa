@@ -7,12 +7,19 @@ import (
 
 var _ io.Writer = (*sinkW)(nil)
 
+// TODO(anderseknert): consider embedding bytes.Buffer directly?
+// This interface is getting quite big..
+
 type sinkWriter interface {
 	io.Writer
+	io.StringWriter
+	io.ByteWriter
 	String() string
+	Bytes() []byte
 	Grow(int)
-	WriteByte(byte) error
-	WriteString(string) (int, error)
+	Len() int
+	Reset()
+	AvailableBuffer() []byte
 }
 
 type sinkW struct {
@@ -70,4 +77,20 @@ func (sw *sinkW) WriteString(s string) (int, error) {
 
 func (sw *sinkW) String() string {
 	return sw.buf.String()
+}
+
+func (sw *sinkW) Bytes() []byte {
+	return sw.buf.Bytes()
+}
+
+func (sw *sinkW) Len() int {
+	return sw.buf.Len()
+}
+
+func (sw *sinkW) Reset() {
+	sw.buf.Reset()
+}
+
+func (sw *sinkW) AvailableBuffer() []byte {
+	return sw.buf.AvailableBuffer()
 }

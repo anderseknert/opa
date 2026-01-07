@@ -7868,10 +7868,9 @@ func TestCompilerRewriteTemplateStrings(t *testing.T) {
 			module: `package test
 				f(x) := $"{x}"`,
 			exp: `package test
-				f(__local0__) := __local2__ if { 
+				f(__local0__) := __local1__ if { 
 					true
-					__local3__ = {__local1__ | __local1__ = __local0__}
-					internal.template_string([__local3__], __local2__)
+					internal.template_string([{__local0__}], __local1__)
 				}`,
 		},
 
@@ -7882,10 +7881,9 @@ func TestCompilerRewriteTemplateStrings(t *testing.T) {
 					y := $"{x}"
 				}`,
 			exp: `package test
-				f(__local0__) := __local1__ if { 
-					__local4__ = {__local2__ | __local2__ = __local0__}
-					internal.template_string([__local4__], __local3__)
-					__local1__ = __local3__
+				f(__local0__) := __local1__ if {
+					internal.template_string([{__local0__}], __local2__)
+					__local1__ = __local2__
 				}`,
 		},
 

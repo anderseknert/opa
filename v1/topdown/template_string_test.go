@@ -19,6 +19,16 @@ var tests = []struct {
 		expRes: ast.StringTerm(""),
 	},
 	{
+		note:   "single number interned",
+		parts:  ast.NewArray(ast.NumberTerm("10")),
+		expRes: ast.StringTerm("10"),
+	},
+	{
+		note:   "single string part interned term",
+		parts:  ast.NewArray(ast.StringTerm("scope")),
+		expRes: ast.StringTerm("scope"),
+	},
+	{
 		note:   "single string part",
 		parts:  ast.NewArray(ast.StringTerm("foo")),
 		expRes: ast.StringTerm("foo"),
@@ -83,21 +93,22 @@ func TestBuiltinTemplateString(t *testing.T) {
 	}
 }
 
-// BenchmarkBuiltinTemplateString/no_parts-16         				13434396	        82.17 ns/op	     344 B/op	       4 allocs/op
-// BenchmarkBuiltinTemplateString/single_string_part-16         	11506334	       106.0 ns/op	     376 B/op	       6 allocs/op
-// BenchmarkBuiltinTemplateString/single_undefined_part-16      	11367075	       106.0 ns/op	     376 B/op	       6 allocs/op
-// BenchmarkBuiltinTemplateString/primitives-16                 	 8217890	       144.9 ns/op	     440 B/op	       7 allocs/op
-// BenchmarkBuiltinTemplateString/collections-16                	 2056494	       583.7 ns/op	    1144 B/op	      28 allocs/op
-// BenchmarkBuiltinTemplateString/multiple_outputs-16           	 9424003	       128.8 ns/op	     480 B/op	       7 allocs/op
+// no_parts-16                                  40689573	        29.66 ns/op	       0 B/op	       0 allocs/op
+// single_string_part_interned_term-16         	31388037	        37.91 ns/op	       0 B/op	       0 allocs/op
+// single_string_part-16                       	18682736	        64.31 ns/op	      43 B/op	       3 allocs/op
+// single_undefined_part-16                    	18175942	        66.25 ns/op	      56 B/op	       3 allocs/op
+// primitives-16                               	13213772	        89.80 ns/op	      56 B/op	       3 allocs/op
+// single_number_interned-16                   	34081790	        35.68 ns/op	       0 B/op	       0 allocs/op
+// collections-16                              	 3531015	       338.4 ns/op	     232 B/op	       9 allocs/op
+// multiple_outputs-16                         	14427541	        82.97 ns/op	     104 B/op	       3 allocs/op
 func BenchmarkBuiltinTemplateString(b *testing.B) {
 	for _, tc := range tests {
 		b.Run(tc.note, func(b *testing.B) {
-			bctx := BuiltinContext{}
 			oper := []*ast.Term{ast.NewTerm(tc.parts)}
 			iter := eqIter(tc.expRes)
 
 			for b.Loop() {
-				_ = builtinTemplateString(bctx, oper, iter)
+				_ = builtinTemplateString(BuiltinContext{}, oper, iter)
 			}
 		})
 	}
