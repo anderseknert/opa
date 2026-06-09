@@ -22,7 +22,6 @@ func (m *Module) AppendText(buf []byte) ([]byte, error) {
 		if annotations.Scope == "package" || annotations.Scope == "subpackages" {
 			buf = append(buf, "# METADATA\n# "...)
 			buf = append(buf, annotations.String()...)
-			buf = append(buf, '\n')
 		}
 	}
 
@@ -99,7 +98,6 @@ func (r *Rule) appendWithOpts(opts toStringOpts, buf []byte) ([]byte, error) {
 	for _, annotations := range r.Annotations {
 		buf = append(buf, "# METADATA\n# "...)
 		buf = append(buf, annotations.String()...)
-		buf = append(buf, '\n')
 	}
 
 	if r.Default {

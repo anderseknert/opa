@@ -5,7 +5,8 @@
 package ast
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"maps"
 	"net/url"
@@ -122,16 +123,12 @@ func (a *Annotations) EndLoc() *Location {
 // Compare returns an integer indicating if a is less than, equal to, or greater
 // than other.
 func (a *Annotations) Compare(other *Annotations) int {
-
-	if a == nil && other == nil {
+	switch {
+	case a == other:
 		return 0
-	}
-
-	if a == nil {
+	case a == nil:
 		return -1
-	}
-
-	if other == nil {
+	case other == nil:
 		return 1
 	}
 
@@ -197,58 +194,72 @@ func (a *Annotations) GetTargetPath() Ref {
 	}
 }
 
-func (a *Annotations) MarshalJSON() ([]byte, error) {
+func (a *Annotations) MarshalJSONTo(e *jsontext.Encoder) error {
+	e.WriteToken(jsontext.BeginObject)
+	e.WriteToken(jsontext.String("scope"))
+
 	if a == nil {
-		return []byte(`{"scope":""}`), nil
+		e.WriteToken(jsontext.String(""))
+		return e.WriteToken(jsontext.EndObject)
 	}
 
-	data := map[string]any{
-		"scope": a.Scope,
-	}
+	e.WriteToken(jsontext.String(a.Scope))
 
 	if a.Title != "" {
-		data["title"] = a.Title
+		e.WriteToken(jsontext.String("title"))
+		e.WriteToken(jsontext.String(a.Title))
 	}
 
 	if a.Description != "" {
-		data["description"] = a.Description
+		e.WriteToken(jsontext.String("description"))
+		e.WriteToken(jsontext.String(a.Description))
 	}
 
 	if a.Entrypoint {
-		data["entrypoint"] = a.Entrypoint
+		e.WriteToken(jsontext.String("entrypoint"))
+		e.WriteToken(jsontext.True)
 	}
 
 	if len(a.Organizations) > 0 {
-		data["organizations"] = a.Organizations
+		e.WriteToken(jsontext.String("organizations"))
+		json.MarshalEncode(e, a.Organizations)
 	}
 
 	if len(a.RelatedResources) > 0 {
-		data["related_resources"] = a.RelatedResources
+		e.WriteToken(jsontext.String("related_resources"))
+		util.WriteMarshalerToArray(e, a.RelatedResources)
 	}
 
 	if len(a.Authors) > 0 {
-		data["authors"] = a.Authors
+		e.WriteToken(jsontext.String("authors"))
+		util.WriteMarshalerToArray(e, a.Authors)
 	}
 
 	if len(a.Schemas) > 0 {
-		data["schemas"] = a.Schemas
+		e.WriteToken(jsontext.String("schemas"))
+		util.WriteMarshalerToArray(e, a.Schemas)
 	}
 
 	if len(a.Custom) > 0 {
-		data["custom"] = a.Custom
+		e.WriteToken(jsontext.String("custom"))
+		json.MarshalEncode(e, a.Custom)
 	}
 
 	if len(a.Labels) > 0 {
-		data["labels"] = a.Labels
+		e.WriteToken(jsontext.String("labels"))
+		json.MarshalEncode(e, a.Labels)
 	}
 
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.Annotations {
-		if a.Location != nil {
-			data["location"] = a.Location
-		}
+	if a.Location != nil && astJSON.GetOptions().MarshalOptions.IncludeLocation.Annotations {
+		e.WriteToken(jsontext.String("location"))
+		a.Location.MarshalJSONTo(e)
 	}
 
-	return json.Marshal(data)
+	return e.WriteToken(jsontext.EndObject)
+}
+
+func (a *Annotations) MarshalJSON() ([]byte, error) {
+	return util.MarshalMarshalerTo(a)
 }
 
 func NewAnnotationsRef(a *Annotations) *AnnotationsRef {
@@ -277,40 +288,35 @@ func (ar *AnnotationsRef) GetPackage() *Package {
 }
 
 func (ar *AnnotationsRef) GetRule() *Rule {
-	switch n := ar.node.(type) {
-	case *Rule:
-		return n
-	default:
-		return nil
+	if r, ok := ar.node.(*Rule); ok {
+		return r
 	}
+	return nil
 }
 
-func (ar *AnnotationsRef) MarshalJSON() ([]byte, error) {
-	data := map[string]any{
-		"path": ar.Path,
-	}
+func (ar *AnnotationsRef) MarshalJSONTo(e *jsontext.Encoder) error {
+	e.WriteToken(jsontext.BeginObject)
+
+	e.WriteToken(jsontext.String("path"))
+	ar.Path.MarshalJSONTo(e)
 
 	if ar.Annotations != nil {
-		data["annotations"] = ar.Annotations
+		e.WriteToken(jsontext.String("annotations"))
+		ar.Annotations.MarshalJSONTo(e)
 	}
 
 	if astJSON.GetOptions().MarshalOptions.IncludeLocation.AnnotationsRef {
 		if ar.Location != nil {
-			data["location"] = ar.Location
-		}
-
-		// The location set for the schema ref terms is wrong (always set to
-		// row 1) and not really useful anyway.. so strip it out before marshalling
-		for _, schema := range ar.Annotations.Schemas {
-			if schema.Path != nil {
-				for _, term := range schema.Path {
-					term.Location = nil
-				}
-			}
+			e.WriteToken(jsontext.String("location"))
+			ar.Location.MarshalJSONTo(e)
 		}
 	}
 
-	return json.Marshal(data)
+	return e.WriteToken(jsontext.EndObject)
+}
+
+func (ar *AnnotationsRef) MarshalJSON() ([]byte, error) {
+	return util.MarshalMarshalerTo(ar)
 }
 
 func scopeCompare(s1, s2 string) int {
@@ -618,7 +624,6 @@ func attachAnnotationsNodes(mod *Module) Errors {
 }
 
 func validateAnnotationScopeAttachment(a *Annotations) *Error {
-
 	switch a.Scope {
 	case annotationScopeRule, annotationScopeDocument:
 		if _, ok := a.node.(*Rule); ok {
@@ -653,6 +658,9 @@ func (a *AuthorAnnotation) Copy() *AuthorAnnotation {
 // Compare returns an integer indicating if s is less than, equal to, or greater
 // than other.
 func (a *AuthorAnnotation) Compare(other *AuthorAnnotation) int {
+	if a == other {
+		return 0
+	}
 	if cmp := strings.Compare(a.Name, other.Name); cmp != 0 {
 		return cmp
 	}
@@ -673,6 +681,22 @@ func (a *AuthorAnnotation) String() string {
 	return fmt.Sprintf("%s <%s>", a.Name, a.Email)
 }
 
+func (a *AuthorAnnotation) MarshalJSONTo(e *jsontext.Encoder) error {
+	e.WriteToken(jsontext.BeginObject)
+
+	if len(a.Name) > 0 {
+		e.WriteToken(jsontext.String("name"))
+		e.WriteToken(jsontext.String(a.Name))
+	}
+
+	if len(a.Email) > 0 {
+		e.WriteToken(jsontext.String("email"))
+		e.WriteToken(jsontext.String(a.Email))
+	}
+
+	return e.WriteToken(jsontext.EndObject)
+}
+
 // Copy returns a deep copy of rr.
 func (rr *RelatedResourceAnnotation) Copy() *RelatedResourceAnnotation {
 	cpy := *rr
@@ -682,10 +706,12 @@ func (rr *RelatedResourceAnnotation) Copy() *RelatedResourceAnnotation {
 // Compare returns an integer indicating if s is less than, equal to, or greater
 // than other.
 func (rr *RelatedResourceAnnotation) Compare(other *RelatedResourceAnnotation) int {
+	if rr == other {
+		return 0
+	}
 	if cmp := strings.Compare(rr.Description, other.Description); cmp != 0 {
 		return cmp
 	}
-
 	if cmp := strings.Compare(rr.Ref.String(), other.Ref.String()); cmp != 0 {
 		return cmp
 	}
@@ -699,15 +725,21 @@ func (rr *RelatedResourceAnnotation) String() string {
 }
 
 func (rr *RelatedResourceAnnotation) MarshalJSON() ([]byte, error) {
-	d := map[string]any{
-		"ref": rr.Ref.String(),
-	}
+	return util.MarshalMarshalerTo(rr)
+}
+
+func (rr *RelatedResourceAnnotation) MarshalJSONTo(e *jsontext.Encoder) error {
+	e.WriteToken(jsontext.BeginObject)
+
+	e.WriteToken(jsontext.String("ref"))
+	e.WriteToken(jsontext.String(rr.Ref.String()))
 
 	if len(rr.Description) > 0 {
-		d["description"] = rr.Description
+		e.WriteToken(jsontext.String("description"))
+		e.WriteToken(jsontext.String(rr.Description))
 	}
 
-	return json.Marshal(d)
+	return e.WriteToken(jsontext.EndObject)
 }
 
 // Copy returns a deep copy of s.
@@ -719,6 +751,9 @@ func (s *SchemaAnnotation) Copy() *SchemaAnnotation {
 // Compare returns an integer indicating if s is less than, equal to, or greater
 // than other.
 func (s *SchemaAnnotation) Compare(other *SchemaAnnotation) int {
+	if s == other {
+		return 0
+	}
 	if cmp := s.Path.Compare(other.Path); cmp != 0 {
 		return cmp
 	}
@@ -743,6 +778,41 @@ func (s *SchemaAnnotation) String() string {
 	return string(bs)
 }
 
+func (s *SchemaAnnotation) MarshalJSONTo(e *jsontext.Encoder) error {
+	e.WriteToken(jsontext.BeginObject)
+
+	if len(s.Path) > 0 {
+		e.WriteToken(jsontext.String("path"))
+		e.WriteToken(jsontext.BeginArray)
+		for _, t := range s.Path {
+			// No location here, as it's incorrect
+			e.WriteToken(jsontext.BeginObject)
+			e.WriteToken(jsontext.String("type"))
+			e.WriteToken(jsontext.String(ValueName(t.Value)))
+			e.WriteToken(jsontext.String("value"))
+			marshalValueTo(e, t.Value)
+			e.WriteToken(jsontext.EndObject)
+		}
+		e.WriteToken(jsontext.EndArray)
+	}
+
+	if len(s.Schema) > 0 {
+		e.WriteToken(jsontext.String("schema"))
+		s.Schema.MarshalJSONTo(e)
+	}
+
+	if s.Definition != nil {
+		e.WriteToken(jsontext.String("definition"))
+		raw := *s.Definition
+		if _, err := InterfaceToValue(raw); err != nil {
+			return fmt.Errorf("invalid definition in schema annotation: %w", err)
+		}
+		json.MarshalEncode(e, s.Definition)
+	}
+
+	return e.WriteToken(jsontext.EndObject)
+}
+
 // Copy returns a deep copy of s.
 func (c *CompileAnnotation) Copy() *CompileAnnotation {
 	if c == nil {
@@ -759,11 +829,11 @@ func (c *CompileAnnotation) Copy() *CompileAnnotation {
 // than other.
 func (c *CompileAnnotation) Compare(other *CompileAnnotation) int {
 	switch {
-	case c == nil && other == nil:
+	case c == other:
 		return 0
-	case c != nil && other == nil:
+	case other == nil:
 		return 1
-	case c == nil && other != nil:
+	case c == nil:
 		return -1
 	}
 
@@ -1101,10 +1171,12 @@ func (t *annotationTreeNode) flatten(refs []*AnnotationsRef) []*AnnotationsRef {
 }
 
 func (ar *AnnotationsRef) Compare(other *AnnotationsRef) int {
+	if ar == other {
+		return 0
+	}
 	if c := ar.Path.Compare(other.Path); c != 0 {
 		return c
 	}
-
 	if c := ar.Annotations.Location.Compare(other.Annotations.Location); c != 0 {
 		return c
 	}

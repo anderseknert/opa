@@ -19,7 +19,6 @@ import (
 	"unicode"
 
 	"github.com/cespare/xxhash/v2"
-	astJSON "github.com/open-policy-agent/opa/v1/ast/json"
 	"github.com/open-policy-agent/opa/v1/ast/location"
 	"github.com/open-policy-agent/opa/v1/util"
 )
@@ -423,53 +422,8 @@ func (term *Term) IsGround() bool {
 	return term.Value.IsGround()
 }
 
-// termJSON is used to serialize Term to JSON without map allocation.
-type termJSON struct {
-	Location *Location `json:"location,omitempty"`
-	Type     string    `json:"type"`
-	Value    Value     `json:"value"`
-}
-
-// MarshalJSON returns the JSON encoding of the term.
-//
-// Specialized marshalling logic is required to include a type hint for Value.
-func (term *Term) MarshalJSON() ([]byte, error) {
-	d := termJSON{
-		Type:  ValueName(term.Value),
-		Value: term.Value,
-	}
-	jsonOptions := astJSON.GetOptions().MarshalOptions
-	if jsonOptions.IncludeLocation.Term {
-		d.Location = term.Location
-	}
-	return json.Marshal(d)
-}
-
 func (term *Term) String() string {
 	return term.Value.String()
-}
-
-// UnmarshalJSON parses the byte array and stores the result in term.
-// Specialized unmarshalling is required to handle Value and Location.
-func (term *Term) UnmarshalJSON(bs []byte) error {
-	v := map[string]any{}
-	if err := util.UnmarshalJSON(bs, &v); err != nil {
-		return err
-	}
-	val, err := unmarshalValue(v)
-	if err != nil {
-		return err
-	}
-	term.Value = val
-
-	if loc, ok := v["location"].(map[string]any); ok {
-		term.Location = &Location{}
-		err := unmarshalLocation(term.Location, loc)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // Vars returns a VarSet with variables contained in this term.
@@ -658,22 +612,6 @@ func (n *Not) String() string {
 	}
 
 	return "not {" + n.Body.String() + "}"
-}
-
-func (n *Not) MarshalJSON() ([]byte, error) {
-	data := map[string]any{
-		"type":          "not",
-		"body":          n.Body,
-		"explicit_body": n.ExplicitBody,
-	}
-
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.Not {
-		if n.Location != nil {
-			data["location"] = n.Location
-		}
-	}
-
-	return json.Marshal(data)
 }
 
 func (n *Not) UnmarshalJSON(bs []byte) error {
@@ -915,6 +853,7 @@ func (Number) IsGround() bool {
 
 // MarshalJSON returns JSON encoded bytes representing num.
 func (num Number) MarshalJSON() ([]byte, error) {
+	// can't be in term_json.go because json/v2 does not have json.Number
 	return json.Marshal(json.Number(num))
 }
 
@@ -1696,14 +1635,6 @@ func (arr *Array) IsGround() bool {
 	return arr.ground
 }
 
-// MarshalJSON returns JSON encoded bytes representing arr.
-func (arr *Array) MarshalJSON() ([]byte, error) {
-	if len(arr.elems) == 0 {
-		return []byte(`[]`), nil
-	}
-	return json.Marshal(arr.elems)
-}
-
 func (arr *Array) String() string {
 	buf, _ := arr.AppendText(make([]byte, 0, arr.StringLength()))
 	return util.ByteSliceToString(buf)
@@ -2052,14 +1983,6 @@ func (s *set) Len() int {
 	return len(s.keys)
 }
 
-// MarshalJSON returns JSON encoded bytes representing s.
-func (s *set) MarshalJSON() ([]byte, error) {
-	if s.keys == nil {
-		return []byte(`[]`), nil
-	}
-	return json.Marshal(s.sortedKeys())
-}
-
 // Sorted returns an Array that contains the sorted elements of s.
 func (s *set) Sorted() *Array {
 	cpy := make([]*Term, len(s.keys))
@@ -2226,10 +2149,6 @@ func (l *lazyObj) Filter(filter Object) (Object, error) {
 
 func (l *lazyObj) Map(f func(*Term, *Term) (*Term, *Term, error)) (Object, error) {
 	return l.force().Map(f)
-}
-
-func (l *lazyObj) MarshalJSON() ([]byte, error) {
-	return l.force().(*object).MarshalJSON()
 }
 
 func (l *lazyObj) Merge(other Object) (Object, bool) {
@@ -2607,15 +2526,6 @@ func (obj *object) Keys() []*Term {
 // Returns an iterator over the obj's keys.
 func (obj *object) KeysIterator() ObjectKeysIterator {
 	return newobjectKeysIterator(obj)
-}
-
-// MarshalJSON returns JSON encoded bytes representing obj.
-func (obj *object) MarshalJSON() ([]byte, error) {
-	sl := make([][2]*Term, obj.Len())
-	for i, node := range obj.sortedKeys() {
-		sl[i] = Item(node.key, node.value)
-	}
-	return json.Marshal(sl)
 }
 
 // Merge returns a new Object containing the non-overlapping keys of obj and other. If there are

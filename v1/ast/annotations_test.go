@@ -128,15 +128,15 @@ p := 7`},
 
 	flattened := as.Flatten()
 	for _, entry := range flattened {
-		fmt.Printf("%v at %v has annotations %v\n",
+		fmt.Printf("%v at %v has annotations %v",
 			entry.Path,
 			entry.Location,
 			entry.Annotations)
 	}
 
 	// Output:
-	// data.foo at foo.rego:5 has annotations {"organizations":["Acme Corp."],"scope":"subpackages"}
-	// data.foo.bar at mod:3 has annotations {"description":"A couple of useful rules","scope":"package"}
+	// data.foo at foo.rego:5 has annotations {"scope":"subpackages","organizations":["Acme Corp."]}
+	// data.foo.bar at mod:3 has annotations {"scope":"package","description":"A couple of useful rules"}
 	// data.foo.bar.p at mod:7 has annotations {"scope":"rule","title":"My Rule P"}
 }
 
@@ -177,7 +177,7 @@ p := 7`},
 
 	flattened := as.Chain(rule)
 	for _, entry := range flattened {
-		fmt.Printf("%v at %v has annotations %v\n",
+		fmt.Printf("%v at %v has annotations %v",
 			entry.Path,
 			entry.Location,
 			entry.Annotations)
@@ -185,8 +185,8 @@ p := 7`},
 
 	// Output:
 	// data.foo.bar.p at mod:7 has annotations {"scope":"rule","title":"My Rule P"}
-	// data.foo.bar at mod:3 has annotations {"description":"A couple of useful rules","scope":"package"}
-	// data.foo at foo.rego:5 has annotations {"organizations":["Acme Corp."],"scope":"subpackages"}
+	// data.foo.bar at mod:3 has annotations {"scope":"package","description":"A couple of useful rules"}
+	// data.foo at foo.rego:5 has annotations {"scope":"subpackages","organizations":["Acme Corp."]}
 }
 
 func TestAnnotationSet_Flatten(t *testing.T) {

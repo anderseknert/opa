@@ -7,8 +7,9 @@ package loader
 import (
 	"bytes"
 	"embed"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -969,6 +970,10 @@ func TestAsBundleWithFile(t *testing.T) {
 		}
 
 		if !actual.Equal(*b) {
+			json.MarshalWrite(t.Output(), b.Modules)
+			fmt.Fprintln(t.Output(), "\n----")
+			json.MarshalWrite(t.Output(), actual.Modules)
+
 			t.Fatalf("Loaded bundle doesn't match expected.\n\nExpected: %+v\n\nActual: %+v\n\n", b, actual)
 		}
 	})

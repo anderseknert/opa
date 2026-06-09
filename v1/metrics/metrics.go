@@ -6,7 +6,9 @@
 package metrics
 
 import (
-	"encoding/json"
+	"bytes"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"slices"
 	"strings"
@@ -120,7 +122,34 @@ func (m *metrics) String() string {
 }
 
 func (m *metrics) MarshalJSON() ([]byte, error) {
-	return json.Marshal(m.All())
+	buf := new(bytes.Buffer)
+	err := m.MarshalJSONTo(jsontext.NewEncoder(buf))
+
+	return buf.Bytes(), err
+}
+
+func (m *metrics) MarshalJSONTo(e *jsontext.Encoder) error {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	e.WriteToken(jsontext.BeginObject)
+	for name, timer := range m.timers {
+		e.WriteToken(jsontext.String(name))
+		e.WriteToken(jsontext.Int(timer.Int64()))
+	}
+	for name, hist := range m.histograms {
+		if v, ok := hist.(*histogram); ok {
+			e.WriteToken(jsontext.String(name))
+			v.MarshalJSONTo(e)
+		}
+	}
+	for name, cntr := range m.counters {
+		if i, ok := cntr.Value().(uint64); ok {
+			e.WriteToken(jsontext.String(name))
+			e.WriteToken(jsontext.Int(int64(i)))
+		}
+	}
+	return e.WriteToken(jsontext.EndObject)
 }
 
 func (m *metrics) Timer(name string) Timer {
@@ -279,15 +308,7 @@ func (h *histogram) Update(v int64) {
 func (h *histogram) Value() any {
 	values := make(map[string]any, 12)
 	snap := h.hist.Snapshot()
-	percentiles := snap.Percentiles([]float64{
-		0.5,
-		0.75,
-		0.9,
-		0.95,
-		0.99,
-		0.999,
-		0.9999,
-	})
+	percentiles := snap.Percentiles(pt[:])
 	values["count"] = snap.Count()
 	values["min"] = snap.Min()
 	values["max"] = snap.Max()
@@ -303,6 +324,41 @@ func (h *histogram) Value() any {
 	return values
 }
 
+var pt = []float64{0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}
+
+func (h *histogram) MarshalJSONTo(e *jsontext.Encoder) error {
+	e.WriteToken(jsontext.BeginObject)
+
+	snap := h.hist.Snapshot()
+	percentiles := snap.Percentiles(pt[:])
+	e.WriteToken(jsontext.String("count"))
+	e.WriteToken(jsontext.Int(snap.Count()))
+	e.WriteToken(jsontext.String("min"))
+	e.WriteToken(jsontext.Int(snap.Min()))
+	e.WriteToken(jsontext.String("max"))
+	e.WriteToken(jsontext.Int(snap.Max()))
+	e.WriteToken(jsontext.String("mean"))
+	e.WriteToken(jsontext.Float(snap.Mean()))
+	e.WriteToken(jsontext.String("stddev"))
+	e.WriteToken(jsontext.Float(snap.StdDev()))
+	e.WriteToken(jsontext.String("median"))
+	e.WriteToken(jsontext.Float(percentiles[0]))
+	e.WriteToken(jsontext.String("75%"))
+	e.WriteToken(jsontext.Float(percentiles[1]))
+	e.WriteToken(jsontext.String("90%"))
+	e.WriteToken(jsontext.Float(percentiles[2]))
+	e.WriteToken(jsontext.String("95%"))
+	e.WriteToken(jsontext.Float(percentiles[3]))
+	e.WriteToken(jsontext.String("99%"))
+	e.WriteToken(jsontext.Float(percentiles[4]))
+	e.WriteToken(jsontext.String("99.9%"))
+	e.WriteToken(jsontext.Float(percentiles[5]))
+	e.WriteToken(jsontext.String("99.99%"))
+	e.WriteToken(jsontext.Float(percentiles[6]))
+
+	return e.WriteToken(jsontext.EndObject)
+}
+
 // Counter defines the interface for a monotonic increasing counter.
 type Counter interface {
 	Value() any
@@ -311,19 +367,19 @@ type Counter interface {
 }
 
 type counter struct {
-	c uint64
+	c atomic.Uint64
 }
 
 func (c *counter) Incr() {
-	atomic.AddUint64(&c.c, 1)
+	c.c.Add(1)
 }
 
 func (c *counter) Add(n uint64) {
-	atomic.AddUint64(&c.c, n)
+	c.c.Add(n)
 }
 
 func (c *counter) Value() any {
-	return atomic.LoadUint64(&c.c)
+	return c.c.Load()
 }
 
 func Statistics(num ...int64) any {

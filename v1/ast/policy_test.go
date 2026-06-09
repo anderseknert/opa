@@ -58,6 +58,8 @@ metadata := 7
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
+	t.Log((string(bs)))
+
 	roundtrip := &Module{}
 
 	err = util.UnmarshalJSON(bs, roundtrip)
@@ -454,8 +456,9 @@ func TestRuleHeadJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if exp, act := `{"body":[],"head":{"name":"allow","ref":[{"type":"var","value":"allow"}]}}`, string(bs); act != exp {
-		t.Errorf("expected %q, got %q", exp, act)
+	exp := []byte(`{"body":[],"head":{"name":"allow","ref":[{"type":"var","value":"allow"}]}}`)
+	if !util.JsonEqual(bs, exp) {
+		t.Errorf("expected %s but got %s", string(exp), string(bs))
 	}
 
 	var readRule Rule
@@ -469,8 +472,9 @@ func TestRuleHeadJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if exp, act := string(bs), string(bs0); exp != act {
-		t.Errorf("expected json repr to match %q, got %q", exp, act)
+
+	if !util.JsonEqual(bs, bs0) {
+		t.Errorf("expected json repr to match %q, got %q", string(bs), string(bs0))
 	}
 
 	var readAgainRule Rule
@@ -928,9 +932,8 @@ func TestAnnotationsString(t *testing.T) {
 	// NOTE(tsandall): for now, annotations are represented as JSON objects
 	// which are a subset of YAML. We could improve this in the future.
 	exp := `{"authors":[{"name":"John Doe","email":"john@example.com"},{"name":"Jane Doe"}],"custom":{"flag":true,"list":[1,2,3],"map":{"one":1,"two":{"3":"three"}}},"description":"baz","organizations":["mi","fa"],"related_resources":[{"ref":"https://example.com"},{"description":"Some resource","ref":"https://example.com/2"}],"schemas":[{"path":[{"type":"var","value":"data"},{"type":"string","value":"bar"}],"schema":[{"type":"var","value":"schema"},{"type":"string","value":"baz"}]}],"scope":"foo","title":"bar"}`
-
-	if got := a.String(); exp != got {
-		t.Fatalf("expected\n%s\nbut got\n%s", exp, got)
+	if !util.JsonEqual([]byte(exp), []byte(a.String())) {
+		t.Fatalf("expected\n%s\nbut got\n%s", exp, a.String())
 	}
 }
 
@@ -961,6 +964,9 @@ import rego.v1
 # METADATA
 # {"scope":"rule"}
 p := 7 if { true }`
+
+	// package test\n\nimport rego.v1\n\n# METADATA\n# {\"scope\":\"rule\"}\np := 7 if { true }
+	// package test\n\nimport rego.v1\n\n# METADATA\n# {\"scope\":\"rule\"}\n\np := 7 if { true }
 
 	if module.String() != exp {
 		t.Fatalf("expected %q but got %q", exp, module.String())

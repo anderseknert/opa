@@ -421,8 +421,8 @@ func TestLogicalAnd_MarshalJSON(t *testing.T) {
 			astJSON.SetOptions(tc.options)
 			t.Cleanup(resetJSONOptions)
 
-			got := string(util.MustMarshalJSON(tc.node))
-			if got != tc.want {
+			got := util.MustMarshalJSON(tc.node)
+			if !util.JsonEqual(got, []byte(tc.want)) {
 				t.Fatalf("MarshalJSON:\nwant: %s\ngot:  %s", tc.want, got)
 			}
 		})
@@ -491,8 +491,8 @@ func TestLogicalOr_MarshalJSON(t *testing.T) {
 			astJSON.SetOptions(tc.options)
 			t.Cleanup(resetJSONOptions)
 
-			got := string(util.MustMarshalJSON(tc.node))
-			if got != tc.want {
+			got := util.MustMarshalJSON(tc.node)
+			if !util.JsonEqual(got, []byte(tc.want)) {
 				t.Fatalf("MarshalJSON:\nwant: %s\ngot:  %s", tc.want, got)
 			}
 		})

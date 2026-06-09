@@ -118,9 +118,17 @@ func TestInterfaceToValueStructs(t *testing.T) {
 
 	var m brokenMarshaller
 
-	_, err = InterfaceToValue(m)
-	if err == nil || err.Error() != "ast: interface conversion: json: error calling MarshalJSON for type ast.brokenMarshaller: broken" {
-		t.Fatal("expected error but got:", err)
+	if _, err = InterfaceToValue(m); err == nil {
+		t.Fatal("expected error but got nil")
+	}
+
+	msg := err.Error()
+	if !strings.HasPrefix(msg, "ast: interface conversion: json: error calling") ||
+		!strings.HasSuffix(msg, "for type *ast.brokenMarshaller: broken") {
+		t.Fatalf("expected error message to have prefix %q and suffix %q but got %q",
+			"ast: interface conversion: json: error calling",
+			"for type ast.brokenMarshaller: broken",
+			msg)
 	}
 }
 

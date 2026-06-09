@@ -6,7 +6,6 @@ package ast
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -514,20 +513,6 @@ func (pkg *Package) String() string {
 	return util.ByteSliceToString(buf)
 }
 
-func (pkg *Package) MarshalJSON() ([]byte, error) {
-	data := map[string]any{
-		"path": pkg.Path,
-	}
-
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.Package {
-		if pkg.Location != nil {
-			data["location"] = pkg.Location
-		}
-	}
-
-	return json.Marshal(data)
-}
-
 // IsValidImportPath returns an error indicating if the import path is invalid.
 // If the import path is valid, err is nil.
 func IsValidImportPath(v Value) (err error) {
@@ -616,24 +601,6 @@ func (imp *Import) Name() Var {
 func (imp *Import) String() string {
 	buf, _ := imp.AppendText(make([]byte, 0, imp.StringLength()))
 	return util.ByteSliceToString(buf)
-}
-
-func (imp *Import) MarshalJSON() ([]byte, error) {
-	data := map[string]any{
-		"path": imp.Path,
-	}
-
-	if len(imp.Alias) != 0 {
-		data["alias"] = imp.Alias
-	}
-
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.Import {
-		if imp.Location != nil {
-			data["location"] = imp.Location
-		}
-	}
-
-	return json.Marshal(data)
 }
 
 // Compare returns an integer indicating whether rule is less than, equal to,
@@ -747,42 +714,6 @@ func (o toStringOpts) RegoVersion() RegoVersion {
 
 func (rule *Rule) isFunction() bool {
 	return len(rule.Head.Args) > 0
-}
-
-// ruleJSON is used for JSON serialization of Rule to avoid map allocation overhead.
-// Field order is alphabetical to match previous map-based output.
-type ruleJSON struct {
-	Annotations []*Annotations `json:"annotations,omitempty"`
-	Body        Body           `json:"body"`
-	Default     bool           `json:"default,omitempty"`
-	Else        *Rule          `json:"else,omitempty"`
-	Head        *Head          `json:"head"`
-	Location    *Location      `json:"location,omitempty"`
-}
-
-func (rule *Rule) MarshalJSON() ([]byte, error) {
-	data := ruleJSON{
-		Head: rule.Head,
-		Body: rule.Body,
-	}
-
-	if rule.Default {
-		data.Default = true
-	}
-
-	if rule.Else != nil {
-		data.Else = rule.Else
-	}
-
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.Rule {
-		data.Location = rule.Location
-	}
-
-	if len(rule.Annotations) != 0 {
-		data.Annotations = rule.Annotations
-	}
-
-	return json.Marshal(data)
 }
 
 // NewHead returns a new Head object. If args are provided, the first will be
@@ -947,27 +878,6 @@ func (head *Head) stringWithOpts(opts toStringOpts) string {
 	return util.ByteSliceToString(buf)
 }
 
-func (head *Head) MarshalJSON() ([]byte, error) {
-	var loc *Location
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.Head && head.Location != nil {
-		loc = head.Location
-	}
-
-	// NOTE(sr): we do this to override the rendering of `head.Reference`.
-	// It's still what'll be used via the default means of encoding/json
-	// for unmarshaling a json object into a Head struct!
-	type h Head
-	return json.Marshal(struct {
-		h
-		Ref      Ref       `json:"ref"`
-		Location *Location `json:"location,omitempty"`
-	}{
-		h:        h(*head),
-		Ref:      head.Ref(),
-		Location: loc,
-	})
-}
-
 // Vars returns a set of vars found in the head.
 func (head *Head) Vars() VarSet {
 	vis := NewVarVisitor()
@@ -1044,17 +954,6 @@ func NewBody(exprs ...*Expr) Body {
 		expr.Index = i
 	}
 	return Body(exprs)
-}
-
-// MarshalJSON returns JSON encoded bytes representing body.
-func (body Body) MarshalJSON() ([]byte, error) {
-	// Serialize empty Body to empty array. This handles both the empty case and the
-	// nil case (whereas by default the result would be null if body was nil.)
-	if len(body) == 0 {
-		return []byte(`[]`), nil
-	}
-	ret, err := json.Marshal([]*Expr(body))
-	return ret, err
 }
 
 // Append adds the expr to the body and updates the expr's index accordingly.
@@ -1528,51 +1427,6 @@ func (expr *Expr) String() string {
 	return util.ByteSliceToString(buf)
 }
 
-// exprJSON is used for JSON serialization of Expr to avoid map allocation overhead.
-// Field order is alphabetical to match previous map-based output.
-type exprJSON struct {
-	Generated bool      `json:"generated,omitempty"`
-	Index     int       `json:"index"`
-	Location  *Location `json:"location,omitempty"`
-	Negated   bool      `json:"negated,omitempty"`
-	Terms     any       `json:"terms"`
-	With      []*With   `json:"with,omitempty"`
-}
-
-func (expr *Expr) MarshalJSON() ([]byte, error) {
-	data := exprJSON{
-		Index: expr.Index,
-		Terms: expr.Terms,
-	}
-
-	if len(expr.With) > 0 {
-		data.With = expr.With
-	}
-
-	if expr.Generated {
-		data.Generated = true
-	}
-
-	if expr.Negated {
-		data.Negated = true
-	}
-
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.Expr {
-		data.Location = expr.Location
-	}
-
-	return json.Marshal(data)
-}
-
-// UnmarshalJSON parses the byte array and stores the result in expr.
-func (expr *Expr) UnmarshalJSON(bs []byte) error {
-	v := map[string]any{}
-	if err := util.UnmarshalJSON(bs, &v); err != nil {
-		return err
-	}
-	return unmarshalExpr(expr, v)
-}
-
 // Vars returns a VarSet containing variables in expr. The params can be set to
 // control which vars are included.
 func (expr *Expr) Vars(params VarVisitorParams) VarSet {
@@ -1660,20 +1514,6 @@ func (d *SomeDecl) Hash() int {
 	return termSliceHash(d.Symbols)
 }
 
-func (d *SomeDecl) MarshalJSON() ([]byte, error) {
-	data := map[string]any{
-		"symbols": d.Symbols,
-	}
-
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.SomeDecl {
-		if d.Location != nil {
-			data["location"] = d.Location
-		}
-	}
-
-	return json.Marshal(data)
-}
-
 func (q *Every) String() string {
 	if q.Key != nil {
 		return fmt.Sprintf("every %s, %s in %s { %s }",
@@ -1730,23 +1570,6 @@ func (q *Every) KeyValueVars() VarSet {
 	return vis.vars
 }
 
-func (q *Every) MarshalJSON() ([]byte, error) {
-	data := map[string]any{
-		"key":    q.Key,
-		"value":  q.Value,
-		"domain": q.Domain,
-		"body":   q.Body,
-	}
-
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.Every {
-		if q.Location != nil {
-			data["location"] = q.Location
-		}
-	}
-
-	return json.Marshal(data)
-}
-
 func (a *LogicalAnd) String() string {
 	return formatBinaryLogical("and", a.Lhs, a.Rhs, a.ExplicitLhs, a.ExplicitRhs)
 }
@@ -1778,28 +1601,6 @@ func (a *LogicalAnd) Compare(other *LogicalAnd) int {
 
 func (a *LogicalAnd) Hash() int {
 	return a.Lhs.Hash() + a.Rhs.Hash()
-}
-
-func (a *LogicalAnd) MarshalJSON() ([]byte, error) {
-	data := map[string]any{
-		"type": "and",
-		"lhs":  a.Lhs,
-		"rhs":  a.Rhs,
-	}
-	if a.ExplicitLhs {
-		data["explicit_lhs"] = true
-	}
-	if a.ExplicitRhs {
-		data["explicit_rhs"] = true
-	}
-
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.And {
-		if a.Location != nil {
-			data["location"] = a.Location
-		}
-	}
-
-	return json.Marshal(data)
 }
 
 func (a *LogicalAnd) UnmarshalJSON(bs []byte) error {
@@ -1841,36 +1642,6 @@ func (o *LogicalOr) Compare(other *LogicalOr) int {
 
 func (o *LogicalOr) Hash() int {
 	return o.Lhs.Hash() + o.Rhs.Hash()
-}
-
-func (o *LogicalOr) MarshalJSON() ([]byte, error) {
-	data := map[string]any{
-		"type": "or",
-		"lhs":  o.Lhs,
-		"rhs":  o.Rhs,
-	}
-	if o.ExplicitLhs {
-		data["explicit_lhs"] = true
-	}
-	if o.ExplicitRhs {
-		data["explicit_rhs"] = true
-	}
-
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.Or {
-		if o.Location != nil {
-			data["location"] = o.Location
-		}
-	}
-
-	return json.Marshal(data)
-}
-
-func (o *LogicalOr) UnmarshalJSON(bs []byte) error {
-	v := map[string]any{}
-	if err := util.UnmarshalJSON(bs, &v); err != nil {
-		return err
-	}
-	return unmarshalLogical("or", &o.Lhs, &o.Rhs, &o.ExplicitLhs, &o.ExplicitRhs, v)
 }
 
 func unmarshalLogical(typeName string, lhs, rhs *Body, explicitLhs, explicitRhs *bool, v map[string]any) error {
@@ -1980,27 +1751,6 @@ func (w *With) Loc() *Location {
 // SetLoc sets the location on w.
 func (w *With) SetLoc(loc *Location) {
 	w.Location = loc
-}
-
-// withJSON is used for JSON serialization of With to avoid map allocation overhead.
-// Field order is alphabetical to match previous map-based output.
-type withJSON struct {
-	Location *Location `json:"location,omitempty"`
-	Target   *Term     `json:"target"`
-	Value    *Term     `json:"value"`
-}
-
-func (w *With) MarshalJSON() ([]byte, error) {
-	data := withJSON{
-		Target: w.Target,
-		Value:  w.Value,
-	}
-
-	if astJSON.GetOptions().MarshalOptions.IncludeLocation.With {
-		data.Location = w.Location
-	}
-
-	return json.Marshal(data)
 }
 
 // Copy returns a deep copy of the AST node x. If x is not an AST node, x is returned unmodified.

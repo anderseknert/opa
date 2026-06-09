@@ -5,7 +5,9 @@
 package metrics_test
 
 import (
-	"encoding/json"
+	"bytes"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"testing"
 	"time"
@@ -13,6 +15,8 @@ import (
 	"github.com/open-policy-agent/opa/v1/metrics"
 )
 
+// 35879 ns/op	   29186 B/op	     349 allocs/op
+// 23744 ns/op	   10240 B/op	      50 allocs/op
 func BenchmarkMetricsMarshaling(b *testing.B) {
 	m := metrics.New()
 
@@ -35,12 +39,17 @@ func BenchmarkMetricsMarshaling(b *testing.B) {
 		}
 	}
 
+	buf := new(bytes.Buffer)
+	e := jsontext.NewEncoder(buf)
+
 	for b.Loop() {
-		bs, err := json.Marshal(m)
-		if err != nil {
+		buf.Reset()
+		e.Reset(buf)
+
+		if err := json.MarshalEncode(e, m); err != nil {
 			b.Fatalf("Unexpected error: %v", err)
 		}
-		if len(bs) == 0 {
+		if buf.Len() == 0 {
 			b.Fatalf("No output")
 		}
 	}

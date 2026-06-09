@@ -3,7 +3,8 @@ package location
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/base64"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 
@@ -120,39 +121,27 @@ func (loc *Location) Compare(other *Location) int {
 }
 
 func (loc *Location) MarshalJSON() ([]byte, error) {
-	// structs are used here to preserve the field ordering of the original Location struct
+	return util.MarshalMarshalerTo(loc)
+}
+
+func (loc *Location) MarshalJSONTo(e *jsontext.Encoder) (err error) {
+	e.WriteToken(jsontext.BeginObject)
+
 	jsonOptions := astJSON.GetOptions().MarshalOptions
-	if jsonOptions.ExcludeLocationFile {
-		data := struct {
-			Row  int    `json:"row"`
-			Col  int    `json:"col"`
-			Text []byte `json:"text,omitempty"`
-		}{
-			Row: loc.Row,
-			Col: loc.Col,
-		}
-
-		if jsonOptions.IncludeLocationText {
-			data.Text = loc.Text
-		}
-
-		return json.Marshal(data)
+	if !jsonOptions.ExcludeLocationFile {
+		e.WriteToken(jsontext.String("file"))
+		e.WriteToken(jsontext.String(loc.File))
 	}
 
-	data := struct {
-		File string `json:"file"`
-		Row  int    `json:"row"`
-		Col  int    `json:"col"`
-		Text []byte `json:"text,omitempty"`
-	}{
-		Row:  loc.Row,
-		Col:  loc.Col,
-		File: loc.File,
-	}
+	e.WriteToken(jsontext.String("row"))
+	e.WriteToken(jsontext.Int(int64(loc.Row)))
+	e.WriteToken(jsontext.String("col"))
+	e.WriteToken(jsontext.Int(int64(loc.Col)))
 
 	if jsonOptions.IncludeLocationText {
-		data.Text = loc.Text
+		e.WriteToken(jsontext.String("text"))
+		e.WriteToken(jsontext.String(base64.StdEncoding.EncodeToString(loc.Text)))
 	}
 
-	return json.Marshal(data)
+	return e.WriteToken(jsontext.EndObject)
 }
