@@ -23,9 +23,21 @@ var (
 	globwildcard = VarTerm("$globwildcard")
 	skipIndexing = NewSet(NewTerm(internalPrintRef), NewTerm(internalTestCaseRef))
 
-	// anyValue is a fake variable we used to put "naked ref" expressions
-	// into the rule index
+	// anyValue is a fake variable we used to put "naked ref"
+	// expressions into the rule index
 	anyValue Value = Var("__any__")
+
+	// intern to avoid allocating the same refs over and over
+	// when building indices for functions without bodies
+	argRefs = [...]Ref{
+		{FunctionArgRootDocument, InternedTerm(0)},
+		{FunctionArgRootDocument, InternedTerm(1)},
+		{FunctionArgRootDocument, InternedTerm(2)},
+		{FunctionArgRootDocument, InternedTerm(3)},
+		{FunctionArgRootDocument, InternedTerm(4)},
+		{FunctionArgRootDocument, InternedTerm(5)},
+		{FunctionArgRootDocument, InternedTerm(6)},
+	}
 )
 
 type (
@@ -70,7 +82,7 @@ func NewIndexResult(kind RuleKind) *IndexResult {
 
 // Empty returns true if there are no rules to evaluate.
 func (ir *IndexResult) Empty() bool {
-	return len(ir.Rules) == 0 && ir.Default == nil
+	return ir == nil || (len(ir.Rules) == 0 && ir.Default == nil)
 }
 
 func newBaseDocEqIndex(isVirtual func(Ref) bool) *baseDocEqIndex {
@@ -100,7 +112,11 @@ func (i *baseDocEqIndex) Build(rules []*Rule) bool {
 			if i.onlyGroundRefs {
 				i.onlyGroundRefs = rule.Head.Reference.IsGround()
 			}
-			if !slices.ContainsFunc(rule.Body, skipIndexingOperator) {
+			if IsEmptyBody(rule.Body) {
+				for j, arg := range rule.Head.Args {
+					indices.insert(rule, &refindex{Ref: getArgRef(j), Value: arg.Value})
+				}
+			} else if !slices.ContainsFunc(rule.Body, skipIndexingOperator) {
 				clear(values)
 				for i := range rule.Body {
 					indices.Update(rule, rule.Body[i], values)
@@ -162,6 +178,7 @@ func (i *baseDocEqIndex) Build(rules []*Rule) bool {
 			return false
 		})
 	}
+
 	return true
 }
 
@@ -351,6 +368,7 @@ func (i *refindices) Update(rule *Rule, expr *Expr, values map[Var]Value) {
 				i.updateEq(rule, ts.Value, anyValue, nil)
 			}
 		}
+		return
 	}
 
 	equalish := op.Equal(equalityRef) || // unification, no 3-operands version exists
@@ -603,7 +621,7 @@ func resolveVarToRef(ri []*refindex, args []*Term, v Var) Ref {
 	}
 	for j, arg := range args {
 		if v.Equal(arg.Value) {
-			return Ref{FunctionArgRootDocument, InternedTerm(j)}
+			return getArgRef(j)
 		}
 	}
 
@@ -1153,4 +1171,11 @@ func stringSliceToArray(s []string) *Array {
 func skipIndexingOperator(expr *Expr) bool {
 	op := expr.OperatorTerm()
 	return op != nil && skipIndexing.Contains(op)
+}
+
+func getArgRef(idx int) Ref {
+	if idx < 0 || idx >= len(argRefs) {
+		return Ref{FunctionArgRootDocument, InternedTerm(idx)}
+	}
+	return argRefs[idx]
 }

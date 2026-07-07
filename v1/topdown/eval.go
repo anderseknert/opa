@@ -1027,8 +1027,18 @@ func (e *eval) evalCall(terms []*ast.Term, iter unifyIterator) error {
 		if err != nil {
 			return err
 		}
-		if ir == nil {
+		if ir.Empty() {
 			return nil
+		}
+
+		if !e.partial() && unconditionalIndexResult(ir) {
+			if rule := ir.Rules[0]; len(terms[1:]) == len(rule.Head.Args)+1 {
+				rterm := terms[len(terms)-1]
+				value := e.bindings.Plug(rule.Head.Value)
+				if unconditionalIndexResultValue(ir, value) {
+					return e.biunifyValues(value, rterm, e.bindings, e.bindings, iter)
+				}
+			}
 		}
 
 		eval := evalFuncPool.Get()
@@ -1844,10 +1854,8 @@ func (e *evalResolver) Resolve(ref ast.Ref) (ast.Value, error) {
 	// that number. The callsite-local arguments are passed in e.args,
 	// indexed by argument index.
 	if ref[0].Equal(ast.FunctionArgRootDocument) {
-		v, ok := ref[1].Value.(ast.Number)
-		if ok {
-			i, ok := v.Int()
-			if ok && i >= 0 && i < len(e.args) {
+		if v, ok := ref[1].Value.(ast.Number); ok {
+			if i, ok := v.Int(); ok && i >= 0 && i < len(e.args) {
 				e.e.instr.stopTimer(evalOpResolve)
 				plugged := e.e.bindings.PlugNamespaced(e.args[i], e.e.caller.bindings)
 				return plugged.Value, nil
@@ -1871,7 +1879,6 @@ func (e *evalResolver) Resolve(ref ast.Ref) (ast.Value, error) {
 	}
 
 	if ref[0].Equal(ast.DefaultRootDocument) {
-
 		var repValue ast.Value
 
 		if e.e.data != nil {
@@ -2036,7 +2043,8 @@ func (e *eval) getDeclArgsLen(x *ast.Expr) (int, error) {
 	defer ast.IndexResultPool.Put(ir)
 	if err != nil {
 		return -1, err
-	} else if ir == nil || ir.Empty() {
+	}
+	if ir.Empty() {
 		return -1, nil
 	}
 
@@ -2931,7 +2939,6 @@ type evalVirtual struct {
 }
 
 func (e evalVirtual) eval(iter unifyIterator) error {
-
 	ir, err := e.e.getRules(e.plugged[:e.pos+1], nil, e.e.ruleIndex(e.plugged[:e.pos+1]))
 	defer ast.IndexResultPool.Put(ir)
 	if err != nil {
@@ -2972,6 +2979,18 @@ func (e evalVirtual) eval(iter unifyIterator) error {
 		return eval.eval(iter)
 	case ast.SingleValue:
 		if ir.OnlyGroundRefs {
+			// If the indexer suggests a "constant" result, we can skip evaluating and
+			// simply unify the result. The trace disabled requirement here is only to
+			// avoid having this impact coverage reporting. We could perhaps do this in
+			// some better way later.
+			if !e.e.partial() && !e.e.traceEnabled && unconditionalIndexResult(ir) {
+				rule := ir.Rules[0]
+				if unconditionalIndexResultValue(ir, rule.Head.Value) {
+					term, termbindings := e.bindings.apply(rule.Head.Value)
+					return e.e.biunify(term, e.rterm, termbindings, e.rbindings, iter)
+				}
+			}
+
 			eval := evalVirtualComplete{
 				e:         e.e,
 				ref:       e.ref,
@@ -3747,7 +3766,6 @@ type evalVirtualComplete struct {
 }
 
 func (e evalVirtualComplete) eval(iter unifyIterator) error {
-
 	if e.ir.Empty() {
 		return nil
 	}
@@ -5158,4 +5176,37 @@ func (e *eval) ruleIndex(ref ast.Ref) ast.RuleIndex {
 		}
 	}
 	return e.compiler.RuleIndex(ref)
+}
+
+// unconditionalIndexResult returns true if the index result is "unconditional",
+// meaning there is only one rule in the result, and it does not need further
+// evaluation.
+func unconditionalIndexResult(ir *ast.IndexResult) bool {
+	if len(ir.Rules) == 1 {
+		if rule := ir.Rules[0]; rule.Else == nil && ast.IsEmptyBody(rule.Body) {
+			// An unconditional rule (lone 'true' term in body),
+			// does not need further evaluation
+			return true
+		}
+	}
+
+	return false
+}
+
+// unconditionalIndexResultValue returns true if the index result value also is
+// "unconditional", i.e. can be returned as is without further evaluation.
+func unconditionalIndexResultValue(ir *ast.IndexResult, value *ast.Term) bool {
+	switch v := value.Value.(type) {
+	case ast.Boolean:
+		return bool(v) || !bool(v) && ir.Default == nil
+	case ast.Null, ast.Number, ast.String:
+		return true
+		// TODO(anders): We could add support for below types too as long
+		// as they are ground. But a few tests assert values into the returned
+		// value, which seems to require some darker form of bindings magic..
+		//
+		// case *ast.Array, ast.Object, ast.Set:
+		// 	return v.IsGround()
+	}
+	return false
 }

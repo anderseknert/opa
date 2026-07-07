@@ -347,8 +347,8 @@ func TestTopdownVirtualCache(t *testing.T) {
 			s["foo"] = true if { true }
 			s["bar"] = true if { true }`,
 			query: `data.p.s["foo"]; data.p.s["foo"]`,
-			hit:   1,
-			miss:  1,
+			hit:   0, // Unconditional rules skip the virtual cache
+			miss:  0,
 		},
 		{
 			note: "partial object: query into object value",

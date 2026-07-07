@@ -1132,7 +1132,6 @@ func (c *Compiler) counterAdd(name string, n uint64) {
 }
 
 func (c *Compiler) buildRuleIndices() {
-
 	c.RuleTree.DepthFirst(func(node *TreeNode) bool {
 		if len(node.Values) == 0 && node.External == nil {
 			return false
@@ -6256,19 +6255,21 @@ func rewriteExprTermsInHead(gen *localVarGenerator, rule *Rule) {
 	}
 }
 
-// isEmptyBody true for a rule like `pi := 3.14 if { true}`
-func isEmptyBody(body Body) bool {
-	if len(body) == 1 {
-		if term, ok := body[0].Terms.(*Term); ok {
-			return Boolean(true).Equal(term.Value)
+// IsEmptyBody true for a rule like `pi := 3.14 if { true}`
+// or as seen in policies, `pi := 3.14`
+func IsEmptyBody(body Body) bool {
+	n := len(body)
+	if n == 1 {
+		expr := body[0]
+		if term, ok := expr.Terms.(*Term); ok {
+			return !expr.Negated && expr.With == nil && Boolean(true).Equal(term.Value)
 		}
 	}
-
-	return false
+	return n == 0
 }
 
 func isConstantRule(rule *Rule) bool {
-	if isEmptyBody(rule.Body) {
+	if IsEmptyBody(rule.Body) {
 		switch v := rule.Head.Value.Value.(type) {
 		case String, Var, Number, Boolean, Null:
 			return true
@@ -6291,7 +6292,7 @@ func appendToBody(body Body, exprs ...*Expr) Body {
 	}
 
 	blen := len(body)
-	if blen == 1 && isEmptyBody(body) {
+	if blen == 1 && IsEmptyBody(body) {
 		// body will no longer be empty, so instead of appending,
 		// replace the 'true' expression with the new expression.
 		exprs[0].Index = 0

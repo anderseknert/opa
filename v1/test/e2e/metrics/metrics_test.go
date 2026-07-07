@@ -204,7 +204,6 @@ func assertCompileInstrumentationMetricsInMap(t *testing.T, _ bool, metrics map[
 func assertDataInstrumentationMetricsInMap(t *testing.T, includeCompile bool, metrics map[string]any) {
 	expectedKeys := []string{
 		"counter_server_query_cache_hit",
-		"counter_eval_op_virtual_cache_miss",
 		"histogram_eval_op_plug",
 		"timer_eval_op_plug_ns",
 		"timer_rego_input_parse_ns",
