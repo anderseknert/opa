@@ -20,11 +20,9 @@ func main() {
 	cmdData := make([]map[string]any, 0)
 
 	for _, c := range command.Commands() {
-		if !showCommand(c) {
-			continue
+		if showCommand(c) {
+			cmdData = append(cmdData, cmdToData(c))
 		}
-
-		cmdData = append(cmdData, cmdToData(c))
 	}
 
 	err := json.NewEncoder(os.Stdout).Encode(cmdData)
@@ -78,10 +76,9 @@ func extractFlags(flagSet *pflag.FlagSet) []map[string]any {
 func cmdToData(c *cobra.Command) map[string]any {
 	childData := make([]map[string]any, 0)
 	for _, childCmd := range c.Commands() {
-		if !showCommand(childCmd) {
-			continue
+		if showCommand(childCmd) {
+			childData = append(childData, cmdToData(childCmd))
 		}
-		childData = append(childData, cmdToData(childCmd))
 	}
 
 	return map[string]any{

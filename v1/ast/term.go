@@ -1665,16 +1665,17 @@ func (arr *Array) Get(pos *Term) *Term {
 	return nil
 }
 
-// Sorted returns a new Array that contains the sorted elements of arr.
+// Sorted returns arr unmodified if sorted, or else a copy containing the sorted elements of arr.
 func (arr *Array) Sorted() *Array {
+	if slices.IsSortedFunc(arr.elems, TermValueCompare) {
+		return arr
+	}
 	cpy := make([]*Term, len(arr.elems))
 	for i := range cpy {
 		cpy[i] = arr.elems[i]
 	}
 
-	slices.SortFunc(cpy, TermValueCompare)
-
-	a := NewArray(cpy...)
+	a := NewArray(util.SortedFunc(cpy, TermValueCompare)...)
 	a.hashs = arr.hashs
 	return a
 }

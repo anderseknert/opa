@@ -26,7 +26,7 @@ var (
 
 	// anyValue is a fake variable we used to put "naked ref" expressions
 	// into the rule index
-	anyValue = Var("__any__")
+	anyValue Value = Var("__any__")
 )
 
 type (

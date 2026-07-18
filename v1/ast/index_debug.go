@@ -6,7 +6,7 @@ package ast
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -65,8 +65,8 @@ func (node *trieNode) mermaidFormat(sb *strings.Builder, counter *int, nodeIDs m
 			pairs = append(pairs, scalarPair{key, val})
 			return false
 		})
-		sort.Slice(pairs, func(a, b int) bool {
-			return pairs[a].key.Compare(pairs[b].key) < 0
+		slices.SortFunc(pairs, func(a, b scalarPair) int {
+			return a.key.Compare(b.key)
 		})
 		for _, pair := range pairs {
 			var scalarLabel string
@@ -192,9 +192,7 @@ func (node *trieNode) format(sb *strings.Builder, depth int) {
 			nodes = append(nodes, val)
 			return false
 		})
-		sort.Slice(scalars, func(a, b int) bool {
-			return scalars[a].Compare(scalars[b]) < 0
-		})
+		slices.SortFunc(scalars, Value.Compare)
 		for i := range scalars {
 			sb.WriteString(indent)
 			fmt.Fprintf(sb, "  %v:\n", scalars[i])

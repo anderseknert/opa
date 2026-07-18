@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -105,13 +106,8 @@ func (o DepAnalysisOutput) Pretty(w io.Writer) error {
 }
 
 func (o DepAnalysisOutput) sort() {
-	sort.Slice(o.Base, func(i, j int) bool {
-		return o.Base[i].Compare(o.Base[j]) < 0
-	})
-
-	sort.Slice(o.Virtual, func(i, j int) bool {
-		return o.Virtual[i].Compare(o.Virtual[j]) < 0
-	})
+	slices.SortFunc(o.Base, ast.RefCompare)
+	slices.SortFunc(o.Virtual, ast.RefCompare)
 }
 
 // Output contains the result of evaluation to be presented.

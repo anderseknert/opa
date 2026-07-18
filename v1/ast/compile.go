@@ -812,10 +812,9 @@ func (c *Compiler) GetRulesWithPrefix(ref Ref) (rules []*Rule) {
 	acc = func(node *TreeNode) {
 		rules = append(rules, node.Values...)
 		for _, child := range node.Children {
-			if child.Hide {
-				continue
+			if !child.Hide {
+				acc(child)
 			}
-			acc(child)
 		}
 	}
 

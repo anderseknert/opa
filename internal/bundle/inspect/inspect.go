@@ -95,18 +95,11 @@ func bundleOrDirInfoForRegoVersion(regoVersion ast.RegoVersion, path string, inc
 
 	wasmModules := make([]map[string]any, 0, len(b.WasmModules))
 	for _, w := range b.WasmModules {
-		wasmModule := map[string]any{
-			"url":  w.URL,
-			"path": w.Path,
-		}
-
-		var entrypoints []string
-		for _, r := range w.Entrypoints {
-			entrypoints = append(entrypoints, r.String())
-		}
-		wasmModule["entrypoints"] = entrypoints
-
-		wasmModules = append(wasmModules, wasmModule)
+		wasmModules = append(wasmModules, map[string]any{
+			"url":         w.URL,
+			"path":        w.Path,
+			"entrypoints": util.Map(w.Entrypoints, (ast.Ref).String),
+		})
 	}
 	bi.WasmModules = wasmModules
 
