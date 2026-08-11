@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unique"
 
 	"github.com/open-policy-agent/opa/v1/ast"
 )
@@ -18,50 +19,43 @@ type undo struct {
 }
 
 func (u *undo) Undo() {
-	if u == nil {
+	if u == nil || u.u == nil {
 		// Allow call on zero value of Undo for ease-of-use.
-		return
-	}
-	if u.u == nil {
 		// Call on empty unifier undos a no-op unify operation.
 		return
 	}
-	u.u.delete(u.k)
+	delete(u.u.values, unique.Make(u.k.Value.(ast.Var)))
 }
 
 type bindings struct {
 	id     uint64
-	values bindingsArrayHashmap
+	values map[unique.Handle[ast.Var]]bindingKeyValue
 	instr  *Instrumentation
 }
 
+type bindingKeyValue struct {
+	key, val *ast.Term
+	bindings *bindings
+}
+
 func newBindings(id uint64, instr *Instrumentation) *bindings {
-	values := newBindingsArrayHashmap()
-	return &bindings{id, values, instr}
+	return &bindings{id: id, instr: instr}
 }
 
 // newBindingsWithSize creates bindings pre-sized for the expected number of entries.
 // This avoids over-allocation when the binding count is known in advance (e.g., function arguments).
 // For sizeHint <= maxLinearScan, it uses array mode; for larger hints, it pre-allocates a map.
 func newBindingsWithSize(id uint64, instr *Instrumentation, sizeHint int) *bindings {
-	values := newBindingsArrayHashmapWithSize(sizeHint)
-	return &bindings{id, values, instr}
+	return &bindings{id: id, instr: instr}
 }
 
 func (u *bindings) Iter(caller *bindings, iter func(*ast.Term, *ast.Term) error) error {
-
-	var err error
-
-	u.values.Iter(func(k *ast.Term, _ value) bool {
-		if err != nil {
-			return true
+	for _, v := range u.values {
+		if err := iter(v.key, u.PlugNamespaced(v.key, caller)); err != nil {
+			return err
 		}
-		err = iter(k, u.PlugNamespaced(k, caller))
-
-		return false
-	})
-
-	return err
+	}
+	return nil
 }
 
 func (u *bindings) Namespace(x ast.Node, caller *bindings) {
@@ -137,39 +131,31 @@ func (u *bindings) plugNamespaced(a *ast.Term, caller *bindings) *ast.Term {
 }
 
 func (u *bindings) bind(a *ast.Term, b *ast.Term, other *bindings, und *undo) {
-	u.values.Put(a, value{
-		u: other,
-		v: b,
-	})
+	k := unique.Make(a.Value.(ast.Var))
+	v := bindingKeyValue{key: a, val: b, bindings: other}
+
+	if u.values == nil {
+		u.values = make(map[unique.Handle[ast.Var]]bindingKeyValue, 6)
+	}
+	u.values[k] = v
+
 	und.k = a
 	und.u = u
 }
 
 func (u *bindings) apply(a *ast.Term) (*ast.Term, *bindings) {
-	// Early exit for non-var terms. Only vars are bound in the binding list,
-	// so the lookup below will always fail for non-var terms. In some cases,
-	// the lookup may be expensive as it has to hash the term (which for large
-	// inputs can be costly).
-	_, ok := a.Value.(ast.Var)
-	if !ok {
-		return a, u
+	if u != nil && a != nil {
+		// Early exit for non-var terms. Only vars are bound in the binding list,
+		// so the lookup below will always fail for non-var terms. In some cases,
+		// the lookup may be expensive as it has to hash the term (which for large
+		// inputs can be costly).
+		if v, ok := a.Value.(ast.Var); ok {
+			if val, ok := u.values[unique.Make(v)]; ok {
+				return val.bindings.apply(val.val)
+			}
+		}
 	}
-	val, ok := u.get(a)
-	if !ok {
-		return a, u
-	}
-	return val.u.apply(val.v)
-}
-
-func (u *bindings) delete(v *ast.Term) {
-	u.values.Delete(v)
-}
-
-func (u *bindings) get(v *ast.Term) (value, bool) {
-	if u == nil {
-		return value{}, false
-	}
-	return u.values.Get(v)
+	return a, u
 }
 
 func (u *bindings) String() string {
@@ -177,10 +163,10 @@ func (u *bindings) String() string {
 		return "()"
 	}
 	var buf []string
-	u.values.Iter(func(a *ast.Term, b value) bool {
-		buf = append(buf, fmt.Sprintf("%v: %v", a, b))
-		return false
-	})
+	for _, v := range u.values {
+		buf = append(buf, fmt.Sprintf("%v: %v", v.key, v.bindings))
+	}
+
 	return fmt.Sprintf("({%v}, %v)", strings.Join(buf, ", "), u.id)
 }
 
@@ -197,22 +183,6 @@ func (u *bindings) namespaceVar(v *ast.Term, caller *bindings) *ast.Term {
 		}
 	}
 	return v
-}
-
-type value struct {
-	u *bindings
-	v *ast.Term
-}
-
-func (v value) String() string {
-	return fmt.Sprintf("(%v, %d)", v.v, v.u.id)
-}
-
-func (v value) equal(other *value) bool {
-	if v.u == other.u {
-		return v.v.Equal(other.v)
-	}
-	return false
 }
 
 type namespacingVisitor struct {
@@ -304,170 +274,4 @@ func (vis namespacingVisitor) namespaceTerm(a *ast.Term) *ast.Term {
 		return &cpy
 	}
 	return a
-}
-
-const maxLinearScan = 16
-
-// bindingsArrayHashMap uses a dynamically growing slice with linear scan instead
-// of a hash map for smaller # of entries. Hash maps start to
-// show off their performance advantage only after 16 keys.
-//
-// Memory optimization: The slice grows incrementally (2 -> 4 -> 8 -> 16) to avoid
-// wasting memory when only a few bindings are used. This is critical for scenarios
-// like comprehensions and functions with few arguments that are called thousands of times.
-type bindingsArrayHashmap struct {
-	n int // Entries in the slice.
-	a []bindingArrayKeyValue
-	m map[ast.Var]bindingArrayKeyValue
-}
-
-type bindingArrayKeyValue struct {
-	key   *ast.Term
-	value value
-}
-
-func newBindingsArrayHashmap() bindingsArrayHashmap {
-	return bindingsArrayHashmap{}
-}
-
-// newBindingsArrayHashmapWithSize creates a bindingsArrayHashmap pre-sized for the expected number of entries.
-// This optimization reduces memory waste when the binding count is known in advance.
-//
-// Size selection strategy:
-// - sizeHint == 0: lazy allocation (no pre-allocation)
-// - sizeHint <= maxLinearScan: pre-allocate slice with exact capacity to avoid reallocation
-// - sizeHint > maxLinearScan: pre-allocate map with exact capacity
-//
-// Memory impact example:
-// - Without hint: dynamic growth 0 -> 2 -> 4 -> 8 -> 16 (saves memory for small counts)
-// - With hint=2: pre-allocates slice with capacity 2 (exact fit, no waste)
-// - With hint=20: pre-allocates map with capacity 20 (saves array allocation + reallocation)
-func newBindingsArrayHashmapWithSize(sizeHint int) bindingsArrayHashmap {
-	if sizeHint <= 0 {
-		// For unknown sizes, use default lazy allocation with dynamic growth.
-		return bindingsArrayHashmap{}
-	}
-
-	if sizeHint <= maxLinearScan {
-		// For small known sizes, pre-allocate slice with exact capacity to avoid growth overhead.
-		return bindingsArrayHashmap{
-			a: make([]bindingArrayKeyValue, 0, sizeHint),
-		}
-	}
-
-	// For larger sizes, pre-allocate map to avoid array allocation + transition cost.
-	return bindingsArrayHashmap{
-		m: make(map[ast.Var]bindingArrayKeyValue, sizeHint),
-	}
-}
-
-func (b *bindingsArrayHashmap) Put(key *ast.Term, value value) {
-	if b.m == nil {
-		// Check if key already exists and update value
-		if i := b.find(key); i >= 0 {
-			b.a[i].value = value
-			return
-		}
-
-		// Still room in slice mode (< maxLinearScan)
-		if b.n < maxLinearScan {
-			// Grow slice if needed using exponential growth strategy
-			if b.n == cap(b.a) {
-				newCap := cap(b.a) * 2
-				if newCap == 0 {
-					newCap = 2 // Start with 2 elements
-				}
-				if newCap > maxLinearScan {
-					newCap = maxLinearScan
-				}
-				newA := make([]bindingArrayKeyValue, b.n, newCap)
-				copy(newA, b.a)
-				b.a = newA
-			}
-			b.a = append(b.a, bindingArrayKeyValue{key, value})
-			b.n++
-			return
-		}
-
-		// Slice is full (reached maxLinearScan), transition to map mode.
-		b.m = make(map[ast.Var]bindingArrayKeyValue, maxLinearScan+1)
-		for _, kv := range b.a {
-			b.m[kv.key.Value.(ast.Var)] = bindingArrayKeyValue{kv.key, kv.value}
-		}
-		b.m[key.Value.(ast.Var)] = bindingArrayKeyValue{key, value}
-
-		// Clear slice to allow GC
-		b.a = nil
-		b.n = 0
-		return
-	}
-
-	b.m[key.Value.(ast.Var)] = bindingArrayKeyValue{key, value}
-}
-
-func (b *bindingsArrayHashmap) Get(key *ast.Term) (value, bool) {
-	if b.m == nil {
-		if i := b.find(key); i >= 0 {
-			return b.a[i].value, true
-		}
-
-		return value{}, false
-	}
-
-	v, ok := b.m[key.Value.(ast.Var)]
-	if ok {
-		return v.value, true
-	}
-
-	return value{}, false
-}
-
-func (b *bindingsArrayHashmap) Delete(key *ast.Term) {
-	if b.m == nil {
-		if i := b.find(key); i >= 0 {
-			n := b.n - 1
-			if i < n {
-				b.a[i] = b.a[n]
-			}
-			// Shrink slice to reflect deletion
-			b.a = b.a[:n]
-			b.n = n
-		}
-		return
-	}
-
-	delete(b.m, key.Value.(ast.Var))
-}
-
-func (b *bindingsArrayHashmap) Iter(f func(k *ast.Term, v value) bool) {
-	if b.m == nil {
-		if b.a != nil {
-			for i := range b.n {
-				if f(b.a[i].key, b.a[i].value) {
-					return
-				}
-			}
-		}
-		return
-	}
-
-	for _, v := range b.m {
-		if f(v.key, v.value) {
-			return
-		}
-	}
-}
-
-func (b *bindingsArrayHashmap) find(key *ast.Term) int {
-	if b.a == nil || b.n == 0 {
-		return -1
-	}
-	v := key.Value.(ast.Var)
-	for i := range b.n {
-		if b.a[i].key.Value.(ast.Var) == v {
-			return i
-		}
-	}
-
-	return -1
 }

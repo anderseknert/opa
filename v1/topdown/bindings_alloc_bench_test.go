@@ -119,34 +119,3 @@ func BenchmarkFunctionArgumentCounts(b *testing.B) {
 		})
 	}
 }
-
-// BenchmarkBindingsArrayHashmapTransition benchmarks the transition from array to map mode.
-func BenchmarkBindingsArrayHashmapTransition(b *testing.B) {
-	b.Run("without_hint_transition_at_17", func(b *testing.B) {
-		b.ReportAllocs()
-		b.ResetTimer()
-		for b.Loop() {
-			bh := newBindingsArrayHashmap()
-			// Add 17 bindings to force transition to map
-			for j := range 17 {
-				key := ast.VarTerm(fmt.Sprintf("x%d", j))
-				val := value{v: ast.IntNumberTerm(j)}
-				bh.Put(key, val)
-			}
-		}
-	})
-
-	b.Run("with_hint_starts_with_map", func(b *testing.B) {
-		b.ReportAllocs()
-		b.ResetTimer()
-		for b.Loop() {
-			bh := newBindingsArrayHashmapWithSize(17)
-			// Add 17 bindings directly to map (no transition)
-			for j := range 17 {
-				key := ast.VarTerm(fmt.Sprintf("x%d", j))
-				val := value{v: ast.IntNumberTerm(j)}
-				bh.Put(key, val)
-			}
-		}
-	})
-}

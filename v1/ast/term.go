@@ -2422,11 +2422,12 @@ func (obj *object) Diff(other Object) Object {
 // as the last two terms in the triplet (respectively).
 func (obj *object) Intersect(other Object) [][3]*Term {
 	r := [][3]*Term{}
-	obj.Foreach(func(k, v *Term) {
+	for _, node := range obj.sortedKeys() {
+		k, v := node.key, node.value
 		if v2 := other.Get(k); v2 != nil {
 			r = append(r, [3]*Term{k, v, v2})
 		}
-	})
+	}
 	return r
 }
 

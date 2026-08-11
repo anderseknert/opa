@@ -4063,10 +4063,10 @@ func (e evalTerm) enumerate(iter unifyIterator) error {
 		// win across most policies. Those cases are however much more complex, as we need to deal with
 		// any type on either side, not just int/var as is the case here.
 		for i := range v.Len() {
-			a := ast.InternedTerm(i)
 			b := e.ref[e.pos]
 
 			if _, ok := b.Value.(ast.Var); ok {
+				a := ast.InternedTerm(i)
 				if e.e.traceEnabled {
 					e.e.traceUnify(a, b)
 				}
