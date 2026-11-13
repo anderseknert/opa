@@ -7026,7 +7026,7 @@ func TestRewriteDeclaredVars(t *testing.T) {
 				package test
 				x = []
 				y = {}
-				p if { __local1__ = data.test.y; __local2__ = data.test.y; walk(__local1__, [__local0__, __local2__]) }
+				p if { __local1__ = data.test.y; walk(__local1__, [__local0__, __local1__]) }
 			`,
 		},
 		{
@@ -8425,7 +8425,7 @@ func TestCompilerRewriteDynamicTerms(t *testing.T) {
 		{`obj_compr if { {"a": "b" | [str]} }`, `{"a": "b" | __local0__ = data.test.str; [__local0__]}`},
 		{`obj_compr2 if { {"a": "b" | {"a": "b" | [str]}} }`, `{"a": "b" | {"a": "b" | __local0__ = data.test.str; [__local0__]}}`},
 		{`equality if { str = str }`, `data.test.str = data.test.str`},
-		{`equality2 if { [str] = [str] }`, `__local0__ = data.test.str; __local1__ = data.test.str; [__local0__] = [__local1__]`},
+		{`equality2 if { [str] = [str] }`, `__local0__ = data.test.str; [__local0__] = [__local0__]`},
 		{`call if { startswith(str, "") }`, `__local0__ = data.test.str; startswith(__local0__, "")`},
 		{`call2 if { count([str], n) }`, `__local0__ = data.test.str; count([__local0__], n)`},
 		{`eq_with if { [str] = [1] with input as 1 }`, `__local0__ = data.test.str with input as 1; [__local0__] = [1] with input as 1`},

@@ -6602,10 +6602,12 @@ func outputVarsForTerms(expr any, safe, output VarSet) VarSet {
 
 type equalityFactory struct {
 	gen *localVarGenerator
+
+	generated map[int]*Expr
 }
 
 func newEqualityFactory(gen *localVarGenerator) *equalityFactory {
-	return &equalityFactory{gen}
+	return &equalityFactory{gen: gen, generated: map[int]*Expr{}}
 }
 
 func (f *equalityFactory) Generate(other *Term) *Expr {
@@ -7176,6 +7178,8 @@ func rewriteDynamicsShallow(original *Expr, f *equalityFactory, term *Term, resu
 //
 // __local0__ = data.bar; foo(__local0__) = 1
 func rewriteDynamics(f *equalityFactory, body Body) Body {
+	clear(f.generated)
+
 	result := make(Body, 0, len(body))
 	for _, expr := range body {
 		switch {
@@ -7277,12 +7281,22 @@ func rewriteDynamicsOne(original *Expr, f *equalityFactory, term *Term, result B
 		for i := 1; i < len(v); i++ {
 			result, v[i] = rewriteDynamicsOne(original, f, v[i], result)
 		}
-		generated := f.Generate(term)
-		generated.With = original.With
-		result.Append(generated)
+
+		hash := term.Hash()
+
+		generated, ok := f.generated[hash]
+		if !ok {
+			generated = f.Generate(term)
+			generated.With = original.With
+			result.Append(generated)
+
+			f.generated[hash] = generated
+		}
+
+		local := generated.Operand(0)
+		f.gen.recordSubjectNoCopy(local.Value.(Var), term)
 		connectGeneratedExprs(original, generated)
-		f.gen.recordSubjectNoCopy(generated.Operand(0).Value.(Var), term)
-		return result, result[len(result)-1].Operand(0)
+		return result, local
 	case *Array:
 		for i := range v.Len() {
 			var t *Term
